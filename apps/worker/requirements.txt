@@ -1,0 +1,5 @@
+celery==5.5.3
+redis==6.4.0
+sqlalchemy==2.0.44
+psycopg[binary]==3.2.12
+pydantic-settings==2.11.0

@@ -1,0 +1,3 @@
+display_name: Platform Spec Audit
+short_description: Verify product claims against the actual repo and checklist.
+default_prompt: Audit the analytics platform against the PRD, MVP scope, architecture, and checklist, then report only what is actually implemented and verified.

@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.08), transparent 35%),
+    radial-gradient(circle at 90% 0%, rgba(14, 116, 144, 0.08), transparent 30%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+* {
+  border-color: var(--line);
+}
+
+.panel {
+  @apply rounded-xl border border-slate-200 bg-white shadow-panel;
+}

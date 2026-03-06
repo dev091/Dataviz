@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+coverage/
+*.log
+.env
+.env.*
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.venv/
+apps/api/.venv/
+apps/worker/.venv/
+apps/api/alembic.ini
+apps/api/local_storage/
+.DS_Store

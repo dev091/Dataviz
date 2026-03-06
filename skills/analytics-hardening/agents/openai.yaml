@@ -1,0 +1,3 @@
+display_name: Analytics Hardening
+short_description: Close checklist gaps with multi-agent safety and release gates.
+default_prompt: Complete remaining hardening tasks, preserve multi-agent NL architecture, run verification commands, and update checklist/runbook with proof.

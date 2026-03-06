@@ -1,0 +1,20 @@
+{
+  "name": "autonomous-analytics-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "packages/ui",
+    "packages/types",
+    "packages/config"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "typecheck:web": "npm --workspace apps/web exec tsc --noEmit",
+    "test:e2e:web": "npm --workspace apps/web run test:e2e",
+    "test:api": "powershell -ExecutionPolicy Bypass -File infrastructure/scripts/backend-tests.ps1",
+    "verify:all": "powershell -ExecutionPolicy Bypass -File infrastructure/scripts/ci-gates.ps1"
+  }
+}

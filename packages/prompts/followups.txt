@@ -1,0 +1,2 @@
+Generate 3 relevant follow-up business questions grounded in the query result.
+Return a JSON array of strings.

@@ -1,0 +1,142 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: analytics-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: analytics-redis
+    ports:
+      - "6379:6379"
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: analytics-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    container_name: analytics-api
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/analytics
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: change-me
+      CORS_ORIGINS: http://localhost:3000
+      STORAGE_ROOT: /app/apps/api/local_storage
+      AI_PROVIDER: openai
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      APP_PUBLIC_URL: http://localhost:3000
+      EMAIL_PROVIDER: smtp
+      EMAIL_FROM: noreply@dataviz.com
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_USE_TLS: "false"
+      SMTP_USE_SSL: "false"
+      ENFORCE_SECURE_CONFIG: "false"
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_REQUESTS_PER_MINUTE: 180
+    depends_on:
+      - postgres
+      - redis
+      - mailhog
+    volumes:
+      - ./:/app
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /app/apps/api
+
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    container_name: analytics-worker
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/analytics
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: change-me
+      STORAGE_ROOT: /app/apps/api/local_storage
+      AI_PROVIDER: openai
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      APP_PUBLIC_URL: http://localhost:3000
+      EMAIL_PROVIDER: smtp
+      EMAIL_FROM: noreply@dataviz.com
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_USE_TLS: "false"
+      SMTP_USE_SSL: "false"
+    depends_on:
+      - postgres
+      - redis
+      - mailhog
+      - api
+    volumes:
+      - ./:/app
+    command: celery -A worker.celery_app worker --beat --loglevel=info
+    working_dir: /app/apps/worker
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+    container_name: analytics-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: npm run dev --workspace apps/web
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: analytics-prometheus
+    profiles: ["observability"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: analytics-grafana
+    profiles: ["observability"]
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  grafana_data:
