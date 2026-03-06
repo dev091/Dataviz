@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 .next/
 out/
 coverage/
@@ -14,4 +14,7 @@ apps/api/.venv/
 apps/worker/.venv/
 apps/api/alembic.ini
 apps/api/local_storage/
+apps/api/*.db
+apps/web/test-results/
+apps/web/tsconfig.tsbuildinfo
 .DS_Store
