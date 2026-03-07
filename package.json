@@ -4,9 +4,7 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/web",
-    "packages/ui",
-    "packages/types",
-    "packages/config"
+    "packages/types"
   ],
   "scripts": {
     "dev:web": "npm --workspace apps/web run dev",
