@@ -1,27 +1,15 @@
-# Implementation Plan (Delivered)
+# Roadmap Execution History
 
-## Phase 1: Product and system definition
-- PRD, scope boundaries, architecture, data model, API spec documented under `/docs`
-- Monorepo structure created across `/apps`, `/packages`, `/infrastructure`
+This file records major delivered implementation batches. It is not the governing roadmap.
 
-## Phase 2: Backend foundation
-- FastAPI app with auth, tenancy, RBAC, domain models, and startup DB bootstrap
-- Connector framework and implementations in `/packages/connectors`
-- Sync framework with runs, jobs, schedules, and logs
-- Semantic services with validation/versioning/context loading
-- Dashboards, alerts, admin, and audit APIs
-- AI orchestration with provider abstraction and NL pipeline
+## Delivered Foundation
+- Multi-tenant platform foundation across web, API, worker, connectors, semantic layer, analytics engine, and governance controls
+- Auth, tenancy, RBAC, audit logging, observability, and runtime security baseline
+- Connector framework with launch connectors and sync orchestration
+- Governed semantic modeling, validation, versioning, and trust review
+- Natural-language analytics with multi-agent planning, safety, SQL execution, chart recommendation, summaries, and follow-ups
+- Autonomous dashboard composition, report packs, alerts, schedules, and proactive intelligence
+- Billing scaffold, admin governance, AI trust history, operational scripts, and local runbook
 
-## Phase 3: Frontend foundation
-- Next.js shell with global navigation and workspace context
-- Auth flows and state management
-- Screens for connections, datasets, semantic editor, NL analytics, dashboards, alerts, admin, and audit
-
-## Phase 4: Working product flows
-- End-to-end path from signup -> connect -> sync -> semantic model -> NL query -> save widget -> schedule/alert
-
-## Phase 5: Quality and packaging
-- Seed script and sample data
-- Pytest flow test and Playwright auth smoke tests
-- Docker Compose for full local stack
-- Runbook and deployment-oriented docs
+## Current Execution Rule
+Use [docs/MASTER_ROADMAP.md](docs/MASTER_ROADMAP.md) as the only governing roadmap and [docs/TASK_CHECKLIST.md](docs/TASK_CHECKLIST.md) as the roadmap progress tracker.

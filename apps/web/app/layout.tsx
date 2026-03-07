@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Autonomy Analytics",
-  description: "AI-native autonomous analytics platform MVP",
+  description: "Autonomous executive reporting, KPI intelligence, and governed AI analytics platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
