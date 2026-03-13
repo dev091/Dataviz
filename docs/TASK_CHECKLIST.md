@@ -44,7 +44,7 @@ Legend:
 - [x] Natural-language analytics grounded in the semantic layer with plan, safety, trace, chart recommendation, summary, and follow-ups
 - [x] Autonomous dashboard composition, widget builder, executive summaries, operating views, exception reports, alerts, schedules, and delivery logs
 - [x] Proactive intelligence with threshold, anomaly, pacing, trend-break, freshness, digest, suggested action, audience routing, and investigation support
-- [x] Admin governance, semantic trust panel, AI trust history, billing scaffold, observability, runtime security, operational verification scripts, and dedicated core capability libraries
+- [x] Admin governance, semantic trust panel, AI trust history, billing scaffold, observability, runtime security, operational verification scripts, dedicated core capability libraries, and an expanded native visualization library with advanced chart families plus custom ECharts escape hatch
 
 ## Highest Priority Remaining Roadmap Gaps
 - [ ] Broader launch-wedge operating systems and repeatable onboarding depth; playbooks and KPI validation instrumentation now exist but real customer validation is still missing
@@ -64,6 +64,7 @@ Legend:
 - [x] `pytest apps/api/tests/test_migration_import_promotion.py apps/api/tests/test_migration_assistant.py -q` -> `2 passed`
 - [x] `pytest apps/api/tests/test_core_flow.py apps/api/tests/test_report_delivery.py -q` -> `2 passed`
 - [x] `npm --workspace apps/web run build` -> passed
+- [x] `pytest apps/api/tests/test_chart_recommendation.py apps/api/tests/test_core_flow.py apps/api/tests/test_report_delivery.py apps/api/tests/test_migration_assistant.py apps/api/tests/test_migration_import_promotion.py apps/api/tests/test_data_prep_autopilot.py apps/api/tests/test_proactive_insights.py -q` -> `9 passed`
 - [x] `npm --workspace apps/web exec -- tsc --noEmit` -> passed
 - [x] `npm --workspace apps/web run test:e2e -- --workers=1` -> `12 passed` (run with `PLAYWRIGHT_SKIP_WEBSERVER=1` against `next start` in this environment)
 - [ ] `docker compose` smoke was not rerun in this shell because Docker CLI is not available in PATH here
@@ -79,6 +80,7 @@ Legend:
 - [ ] Execute live connector validation with real PostgreSQL, MySQL, Google Sheets, and Salesforce credentials.
 - [ ] Run non-trivial load and performance tests across sync, NL query, dashboards, and worker paths.
 - [ ] Execute backup and restore drill, pilot UAT, and production cutover.
+
 
 
 

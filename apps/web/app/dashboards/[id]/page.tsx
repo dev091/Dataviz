@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout, Responsive, WidthProvider } from "react-grid-layout";
 
+import { SUPPORTED_CHART_TYPES, getChartInputBlueprint, type HierarchyNode, type SupportedChartTypeId } from "@platform/visuals";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea } from "@/components/ui";
 
 import { ChartRenderer } from "@/components/chart-renderer";
@@ -66,13 +67,94 @@ type ReportPack = {
   next_actions: string[];
 };
 
-type ManualWidgetKind = "bar" | "line" | "area" | "donut" | "table" | "kpi" | "custom";
+type ManualWidgetKind =
+  | "bar"
+  | "horizontal_bar"
+  | "stacked_bar"
+  | "line"
+  | "area"
+  | "stacked_area"
+  | "pie"
+  | "donut"
+  | "funnel"
+  | "waterfall"
+  | "radar"
+  | "scatter"
+  | "bubble"
+  | "heatmap"
+  | "treemap"
+  | "sunburst"
+  | "sankey"
+  | "boxplot"
+  | "gauge"
+  | "table"
+  | "kpi"
+  | "custom";
+
+const PAIRED_WIDGET_KINDS: ManualWidgetKind[] = ["bar", "horizontal_bar", "stacked_bar", "line", "area", "stacked_area", "pie", "donut", "funnel", "waterfall", "radar"];
 
 function parseCsvList(value: string): string[] {
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseNumericList(value: string): number[] {
+  return parseCsvList(value).map((item) => {
+    const parsed = Number(item);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+}
+
+function parseRowLines(value: string): string[][] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(",").map((item) => item.trim()));
+}
+
+function buildHierarchyNodes(rows: string[][]): HierarchyNode[] {
+  const nodeMap = new Map<string, HierarchyNode>();
+  const childKeys = new Set<string>();
+
+  const ensureNode = (name: string, value?: number): HierarchyNode => {
+    const existing = nodeMap.get(name);
+    if (existing) {
+      if (value !== undefined) {
+        existing.value = value;
+      }
+      return existing;
+    }
+    const created: HierarchyNode = { name };
+    if (value !== undefined) {
+      created.value = value;
+    }
+    nodeMap.set(name, created);
+    return created;
+  };
+
+  rows.forEach((row) => {
+    const name = row[0];
+    if (!name) {
+      return;
+    }
+    const value = Number(row[1]);
+    const parent = row[2];
+    const node = ensureNode(name, Number.isFinite(value) ? value : undefined);
+    if (!parent) {
+      return;
+    }
+    const parentNode = ensureNode(parent);
+    parentNode.children = parentNode.children ?? [];
+    if (!parentNode.children.some((child) => child.name === node.name)) {
+      parentNode.children.push(node);
+    }
+    childKeys.add(name);
+  });
+
+  return Array.from(nodeMap.values()).filter((node) => !childKeys.has(node.name));
 }
 
 function widgetChart(widget: Widget): Record<string, unknown> {
@@ -125,6 +207,7 @@ export default function DashboardBuilderPage() {
   const [kpiValue, setKpiValue] = useState("126500");
   const [kpiDelta, setKpiDelta] = useState("+9.4% vs prior period");
   const [customChartJson, setCustomChartJson] = useState('{"option":{"title":{"text":"Custom Widget"},"xAxis":{"type":"category","data":["A","B","C"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[12,20,15]}]}}');
+  const [advancedData, setAdvancedData] = useState("West,Jan,54`nWest,Feb,62`nEast,Jan,41");
   const [autoComposeModelId, setAutoComposeModelId] = useState("");
   const [autoComposeGoal, setAutoComposeGoal] = useState("Executive overview with KPI, trend, mix, and detail widgets");
   const [reportAudience, setReportAudience] = useState("Executive leadership");
@@ -144,6 +227,7 @@ export default function DashboardBuilderPage() {
 
   const dashboard = dashboardQuery.data;
   const semanticModels = semanticModelsQuery.data ?? [];
+  const chartBlueprint = widgetKind !== "table" && widgetKind !== "kpi" && widgetKind !== "custom" ? getChartInputBlueprint(widgetKind as SupportedChartTypeId) : null;
 
   useEffect(() => {
     if (!autoComposeModelId && semanticModels[0]) {
@@ -249,9 +333,9 @@ export default function DashboardBuilderPage() {
   function buildManualWidgetPayload(): WidgetPayload {
     const y = (dashboard?.widgets.length ?? 0) * 4;
 
-    if (["bar", "line", "area", "donut"].includes(widgetKind)) {
+    if (PAIRED_WIDGET_KINDS.includes(widgetKind)) {
       const labels = parseCsvList(chartLabels);
-      const numericValues = parseCsvList(chartValues).map((item) => Number(item));
+      const numericValues = parseNumericList(chartValues);
       return {
         title: widgetTitle,
         widget_type: widgetKind,
@@ -263,7 +347,7 @@ export default function DashboardBuilderPage() {
             series: [
               {
                 name: widgetTitle,
-                data: labels.map((label, index) => [label, Number.isFinite(numericValues[index]) ? numericValues[index] : 0]),
+                data: labels.map((label, index) => [label, numericValues[index] ?? 0]),
               },
             ],
           },
@@ -271,19 +355,154 @@ export default function DashboardBuilderPage() {
       };
     }
 
+    if (widgetKind === "scatter" || widgetKind === "bubble") {
+      const rows = parseRowLines(advancedData);
+      return {
+        title: widgetTitle,
+        widget_type: widgetKind,
+        position: { x: 0, y, w: 6, h: 5 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: widgetKind,
+            x_metric: chartLabels || "X",
+            y_metric: chartValues || "Y",
+            series: [
+              {
+                name: widgetTitle,
+                data: rows.map((row) => {
+                  const x = Number(row[0] ?? 0);
+                  const yValue = Number(row[1] ?? 0);
+                  if (widgetKind === "bubble") {
+                    return [x, yValue, Number(row[2] ?? 12), row[3] ?? row[0] ?? "Point"];
+                  }
+                  return [x, yValue, row[2] ?? row[0] ?? "Point"];
+                }),
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    if (widgetKind === "heatmap") {
+      const rows = parseRowLines(advancedData);
+      const xCategories = Array.from(new Set(rows.map((row) => row[0]).filter(Boolean)));
+      const yCategories = Array.from(new Set(rows.map((row) => row[1]).filter(Boolean)));
+      return {
+        title: widgetTitle,
+        widget_type: widgetKind,
+        position: { x: 0, y, w: 7, h: 5 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: "heatmap",
+            x_categories: xCategories,
+            y_categories: yCategories,
+            series: [
+              {
+                name: widgetTitle,
+                data: rows.map((row) => [row[0] ?? "", row[1] ?? "", Number(row[2] ?? 0)]),
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    if (widgetKind === "treemap" || widgetKind === "sunburst") {
+      const nodes = buildHierarchyNodes(parseRowLines(advancedData));
+      return {
+        title: widgetTitle,
+        widget_type: widgetKind,
+        position: { x: 0, y, w: 6, h: 5 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: widgetKind,
+            nodes,
+          },
+        },
+      };
+    }
+
+    if (widgetKind === "sankey") {
+      const rows = parseRowLines(advancedData);
+      const nodeNames = Array.from(
+        new Set(rows.flatMap((row) => [row[0], row[1]]).filter((item): item is string => Boolean(item))),
+      );
+      return {
+        title: widgetTitle,
+        widget_type: widgetKind,
+        position: { x: 0, y, w: 7, h: 5 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: "sankey",
+            nodes: nodeNames.map((name) => ({ name })),
+            links: rows.map((row) => ({
+              source: row[0] ?? "",
+              target: row[1] ?? "",
+              value: Number(row[2] ?? 0),
+            })),
+          },
+        },
+      };
+    }
+
+    if (widgetKind === "boxplot") {
+      const rows = parseRowLines(advancedData);
+      return {
+        title: widgetTitle,
+        widget_type: widgetKind,
+        position: { x: 0, y, w: 6, h: 5 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: "boxplot",
+            categories: rows.map((row) => row[0] ?? "Group"),
+            series: [
+              {
+                name: widgetTitle,
+                data: rows.map((row) => [
+                  Number(row[1] ?? 0),
+                  Number(row[2] ?? 0),
+                  Number(row[3] ?? 0),
+                  Number(row[4] ?? 0),
+                  Number(row[5] ?? 0),
+                ]),
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    if (widgetKind === "gauge") {
+      return {
+        title: widgetTitle,
+        widget_type: "gauge",
+        position: { x: 0, y, w: 4, h: 4 },
+        config: {
+          summary: widgetSummary,
+          chart: {
+            type: "gauge",
+            metric: kpiMetric,
+            value: Number(kpiValue),
+            formatter: "{value}%",
+          },
+        },
+      };
+    }
+
     if (widgetKind === "table") {
       const columns = parseCsvList(tableColumns);
-      const rows = tableRows
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const values = line.split(",").map((item) => item.trim());
-          return columns.reduce<Record<string, string>>((acc, column, index) => {
-            acc[column] = values[index] ?? "";
-            return acc;
-          }, {});
-        });
+      const rows = parseRowLines(tableRows).map((values) => {
+        return columns.reduce<Record<string, string>>((accumulator, column, index) => {
+          accumulator[column] = values[index] ?? "";
+          return accumulator;
+        }, {});
+      });
 
       return {
         title: widgetTitle,
@@ -490,13 +709,18 @@ export default function DashboardBuilderPage() {
           <div className="grid gap-3 md:grid-cols-3">
             <Input value={widgetTitle} onChange={(e) => setWidgetTitle(e.target.value)} placeholder="Widget title" />
             <select className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={widgetKind} onChange={(e) => setWidgetKind(e.target.value as ManualWidgetKind)}>
-              <option value="bar">Bar chart</option>
-              <option value="line">Line chart</option>
-              <option value="area">Area chart</option>
-              <option value="donut">Donut chart</option>
-              <option value="table">Table widget</option>
-              <option value="kpi">KPI card</option>
-              <option value="custom">Custom ECharts</option>
+              <optgroup label="Native charts">
+                {SUPPORTED_CHART_TYPES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Report widgets">
+                <option value="table">Table widget</option>
+                <option value="kpi">KPI card</option>
+                <option value="custom">Custom ECharts</option>
+              </optgroup>
             </select>
             <Button onClick={addManualWidget} disabled={addWidgetMutation.isPending}>
               {addWidgetMutation.isPending ? "Adding..." : "Add widget"}
@@ -508,20 +732,21 @@ export default function DashboardBuilderPage() {
             onChange={(e) => setWidgetSummary(e.target.value)}
             placeholder="Executive summary for this widget"
           />
+          {chartBlueprint ? <p className="text-xs text-slate-500">{chartBlueprint.note}</p> : null}
 
-          {(["bar", "line", "area", "donut"] as ManualWidgetKind[]).includes(widgetKind) ? (
+          {PAIRED_WIDGET_KINDS.includes(widgetKind) ? (
             <div className="grid gap-3 md:grid-cols-2">
               <Textarea
                 className="min-h-24"
                 value={chartLabels}
                 onChange={(e) => setChartLabels(e.target.value)}
-                placeholder="North,South,West"
+                placeholder={chartBlueprint?.labelsPlaceholder ?? "North,South,West"}
               />
               <Textarea
                 className="min-h-24"
                 value={chartValues}
                 onChange={(e) => setChartValues(e.target.value)}
-                placeholder="59800,30600,37100"
+                placeholder={chartBlueprint?.valuesPlaceholder ?? "59800,30600,37100"}
               />
             </div>
           ) : null}
@@ -543,10 +768,32 @@ export default function DashboardBuilderPage() {
             </div>
           ) : null}
 
-          {widgetKind === "kpi" ? (
+          {widgetKind === "scatter" || widgetKind === "bubble" ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input value={chartLabels} onChange={(e) => setChartLabels(e.target.value)} placeholder="X axis label" />
+              <Input value={chartValues} onChange={(e) => setChartValues(e.target.value)} placeholder="Y axis label" />
+              <Textarea
+                className="min-h-32 md:col-span-2"
+                value={advancedData}
+                onChange={(e) => setAdvancedData(e.target.value)}
+                placeholder={chartBlueprint?.rowsPlaceholder ?? "21,44,North\n35,52,South"}
+              />
+            </div>
+          ) : null}
+
+          {widgetKind === "heatmap" || widgetKind === "treemap" || widgetKind === "sunburst" || widgetKind === "sankey" || widgetKind === "boxplot" ? (
+            <Textarea
+              className="min-h-32 w-full"
+              value={advancedData}
+              onChange={(e) => setAdvancedData(e.target.value)}
+              placeholder={chartBlueprint?.rowsPlaceholder}
+            />
+          ) : null}
+
+          {widgetKind === "kpi" || widgetKind === "gauge" ? (
             <div className="grid gap-3 md:grid-cols-3">
-              <Input value={kpiMetric} onChange={(e) => setKpiMetric(e.target.value)} placeholder="Revenue" />
-              <Input value={kpiValue} onChange={(e) => setKpiValue(e.target.value)} placeholder="126500" />
+              <Input value={kpiMetric} onChange={(e) => setKpiMetric(e.target.value)} placeholder={widgetKind === "gauge" ? "Attainment" : "Revenue"} />
+              <Input value={kpiValue} onChange={(e) => setKpiValue(e.target.value)} placeholder={widgetKind === "gauge" ? "82" : "126500"} />
               <Input value={kpiDelta} onChange={(e) => setKpiDelta(e.target.value)} placeholder="+9.4% vs prior period" />
             </div>
           ) : null}
@@ -677,5 +924,16 @@ export default function DashboardBuilderPage() {
     </section>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
 
 

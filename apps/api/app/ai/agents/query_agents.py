@@ -97,11 +97,11 @@ class QueryExecutionAgent(BaseAgent):
 class VisualizationAgent(BaseAgent):
     name = "visualization_agent"
 
-    def run(self, *, plan: QueryPlan, rows: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
-        step = self.make_step({"plan": plan.model_dump(), "row_count": len(rows)})
+    def run(self, *, question: str, plan: QueryPlan, rows: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+        step = self.make_step({"question": question, "plan": plan.model_dump(), "row_count": len(rows)})
         step.start()
         try:
-            chart = recommend_chart(plan.model_dump(), rows)
+            chart = recommend_chart({**plan.model_dump(), "question": question}, rows)
             step.complete({"chart_type": chart.get("type", "unknown")})
             return chart, step.to_dict()
         except Exception as exc:  # noqa: BLE001
@@ -166,3 +166,4 @@ class NarrativeAgent(BaseAgent):
         except Exception as exc:  # noqa: BLE001
             step.fail(exc)
             raise
+

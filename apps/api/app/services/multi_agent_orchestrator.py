@@ -97,7 +97,7 @@ class MultiAgentOrchestrator:
         rows, execution_step = self.execution.run(db=db, sql=sql_text)
         trace.append(execution_step)
 
-        chart, viz_step = self.visualization.run(plan=plan, rows=rows)
+        chart, viz_step = self.visualization.run(question=question, plan=plan, rows=rows)
         trace.append(viz_step)
 
         insights, insight_step = self.insight.run(rows=rows, metrics=plan.metrics, dimensions=plan.dimensions)
@@ -126,3 +126,4 @@ class MultiAgentOrchestrator:
 
 
 multi_agent_orchestrator = MultiAgentOrchestrator()
+

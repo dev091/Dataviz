@@ -234,7 +234,7 @@ Legend:
 ### Autonomous Dashboard and Reporting Engine
 - [~] Owner: Executive Reporting Agent
 - [~] Collaborators: Dashboard and Storytelling Agent, BI Product Architect Agent, Conversational Analytics Agent
-- [x] Deliverables: dashboard builder, AI widget save flow, auto-compose, executive summaries, report packs
+- [x] Deliverables: dashboard builder, AI widget save flow, auto-compose, executive summaries, report packs, advanced visualization library, and custom ECharts escape hatch
 - [~] Autonomous scope: dashboard composition, report-pack generation, narrative summaries
 - [~] Human review: stakeholder-facing dashboard approval, final board pack sign-off, layout refinement
 - [x] Failure handling: safe default widgets, editable manual widgets, persisted audit events
@@ -244,7 +244,7 @@ Legend:
 ### Natural-Language Analytics Engine
 - [x] Owner: Conversational Analytics Agent
 - [x] Collaborators: Semantic Modeling Agent, Governance and Security Agent, Dashboard and Storytelling Agent
-- [x] Deliverables: plan generation, SQL safety, execution, chart recommendation, summary, follow-ups, related query recall
+- [x] Deliverables: plan generation, SQL safety, execution, richer chart recommendation, summary, follow-ups, related query recall
 - [x] Autonomous scope: full NL query pipeline within approved semantic scope
 - [~] Human review: ambiguous KPI intent, high-risk decision workflows, data trust exceptions
 - [x] Failure handling: unsafe query rejection, agent trace, deterministic fallback behavior
@@ -387,6 +387,7 @@ Legend:
 - The platform now partially aligns with a more ambitious Autonomous Executive Reporting and KPI Intelligence company roadmap.
 - The biggest remaining gaps are now productized onboarding, migration breadth, transformation and prompt lineage depth, proactive intelligence depth, pricing validation, and real production execution.
 - The correct answer to "are we 100% done against this new master roadmap" is `no`.
+
 
 
 
