@@ -1,4 +1,4 @@
-﻿from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -22,11 +22,17 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_requests_per_minute: int = 180
 
+    storage_backend: str = "local"
     storage_root: str = "apps/api/local_storage"
+    s3_bucket: str = ""
+    s3_region: str = ""
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
 
     ai_provider: str = "openai"
     openai_api_key: str = ""
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-5.4"
     openai_base_url: str | None = None
 
     email_provider: str = "log"
@@ -54,3 +60,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+

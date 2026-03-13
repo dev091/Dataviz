@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@platform/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, EmptyStateBody, EmptyStateTitle, Input, Skeleton } from "@/components/ui";
 
 import { apiRequest } from "@/lib/api";
 
@@ -41,7 +42,7 @@ type SchemaPreview = {
   datasets: SchemaDataset[];
 };
 
-type ConnectorType = "csv" | "postgresql" | "mysql" | "google_sheets" | "salesforce";
+type ConnectorType = "file_upload" | "postgresql" | "mysql" | "google_sheets" | "salesforce";
 
 type ConnectorForms = {
   postgresql: { uri: string };
@@ -57,7 +58,7 @@ type ConnectorForms = {
 };
 
 const connectorOptions: Array<{ value: ConnectorType; label: string; description: string }> = [
-  { value: "csv", label: "CSV Upload", description: "Upload local files for quick governed ingestion." },
+  { value: "file_upload", label: "File Upload", description: "Upload CSV, TSV, JSON, Excel, Parquet, ODS, XML, or text files for governed ingestion." },
   { value: "postgresql", label: "PostgreSQL", description: "Connect a transactional or warehouse Postgres source." },
   { value: "mysql", label: "MySQL", description: "Sync operational MySQL tables into the workspace." },
   { value: "google_sheets", label: "Google Sheets", description: "Pull published Sheets via CSV export URL." },
@@ -78,32 +79,37 @@ const initialForms: ConnectorForms = {
 };
 
 function connectorLabel(value: string): string {
+  if (value === "csv" || value === "file_upload") return "File Upload";
   return connectorOptions.find((option) => option.value === value)?.label ?? value;
 }
 
+function toneForStatus(status: string): "default" | "success" | "warning" | "danger" {
+  if (status === "success" || status === "ready") return "success";
+  if (status === "running") return "warning";
+  if (status === "failed") return "danger";
+  return "default";
+}
+
 export default function ConnectionsPage() {
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [syncRuns, setSyncRuns] = useState<Record<string, SyncRun[]>>({});
+  const queryClient = useQueryClient();
   const [name, setName] = useState("Revenue Source");
-  const [connectorType, setConnectorType] = useState<ConnectorType>("csv");
+  const [connectorType, setConnectorType] = useState<ConnectorType>("file_upload");
   const [forms, setForms] = useState<ConnectorForms>(initialForms);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [preview, setPreview] = useState<SchemaPreview | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [activeLogConnectionId, setActiveLogConnectionId] = useState<string | null>(null);
 
-  async function loadConnections() {
-    try {
-      const data = await apiRequest<Connection[]>("/api/v1/connections");
-      setConnections(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load connections");
-    }
-  }
+  const connectionsQuery = useQuery({
+    queryKey: ["connections"],
+    queryFn: () => apiRequest<Connection[]>("/api/v1/connections"),
+  });
 
-  useEffect(() => {
-    void loadConnections();
-  }, []);
+  const syncRunsQuery = useQuery({
+    queryKey: ["sync-runs", activeLogConnectionId],
+    enabled: Boolean(activeLogConnectionId),
+    queryFn: () => apiRequest<SyncRun[]>(`/api/v1/connections/${activeLogConnectionId}/sync-runs`),
+  });
 
   function setConnectorField<T extends keyof ConnectorForms>(type: T, field: keyof ConnectorForms[T], value: string) {
     setForms((current) => ({
@@ -116,7 +122,7 @@ export default function ConnectionsPage() {
   }
 
   function buildConfig(): Record<string, unknown> {
-    if (connectorType === "csv") {
+    if (connectorType === "file_upload") {
       return {};
     }
     if (connectorType === "postgresql") {
@@ -137,93 +143,82 @@ export default function ConnectionsPage() {
     };
   }
 
-  async function handleCreate(event: FormEvent) {
-    event.preventDefault();
-    setCreating(true);
-    setError(null);
+  const refreshConnections = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["connections"] });
+    if (activeLogConnectionId) {
+      await queryClient.invalidateQueries({ queryKey: ["sync-runs", activeLogConnectionId] });
+    }
+  };
 
-    try {
+  const createConnection = useMutation({
+    mutationFn: async () => {
       let config = buildConfig();
-      if (connectorType === "csv") {
-        if (!csvFile) {
-          throw new Error("Please upload a CSV file first.");
+      if (connectorType === "file_upload") {
+        if (!uploadedFile) {
+          throw new Error("Please upload a supported file first.");
         }
         const body = new FormData();
-        body.append("file", csvFile);
-        const upload = await apiRequest<{ file_path: string }>(
-          "/api/v1/connections/csv/upload",
+        body.append("file", uploadedFile);
+        const upload = await apiRequest<{ file_path: string; file_name: string; file_format: string }>(
+          "/api/v1/connections/files/upload",
           { method: "POST", body },
           { withAuth: true, workspaceScoped: true },
         );
-        config = { file_path: upload.file_path };
+        config = { file_path: upload.file_path, file_format: upload.file_format };
       }
 
-      await apiRequest("/api/v1/connections", {
+      return apiRequest("/api/v1/connections", {
         method: "POST",
         body: JSON.stringify({ name, connector_type: connectorType, config }),
       });
+    },
+    onSuccess: async () => {
+      setPageError(null);
       setPreview(null);
-      await loadConnections();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create connection");
-    } finally {
-      setCreating(false);
-    }
-  }
+      await refreshConnections();
+    },
+    onError: (error) => setPageError(error instanceof Error ? error.message : "Failed to create connection"),
+  });
 
-  async function discover(connectionId: string) {
-    setError(null);
-    try {
-      const data = await apiRequest<SchemaPreview>(`/api/v1/connections/${connectionId}/discover`, {
-        method: "POST",
-      });
+  const discoverConnection = useMutation({
+    mutationFn: (connectionId: string) => apiRequest<SchemaPreview>(`/api/v1/connections/${connectionId}/discover`, { method: "POST" }),
+    onSuccess: (data) => {
+      setPageError(null);
       setPreview(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to discover schema");
-    }
-  }
+    },
+    onError: (error) => setPageError(error instanceof Error ? error.message : "Failed to discover schema"),
+  });
 
-  async function sync(connectionId: string) {
-    setError(null);
-    try {
-      await apiRequest(`/api/v1/connections/${connectionId}/sync`, { method: "POST" });
-      await loadConnections();
-      await loadSyncRuns(connectionId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to sync connection");
-    }
-  }
+  const syncConnection = useMutation({
+    mutationFn: (connectionId: string) => apiRequest(`/api/v1/connections/${connectionId}/sync`, { method: "POST" }),
+    onSuccess: async (_, connectionId) => {
+      setPageError(null);
+      setActiveLogConnectionId(connectionId);
+      await refreshConnections();
+    },
+    onError: (error) => setPageError(error instanceof Error ? error.message : "Failed to sync connection"),
+  });
 
-  async function scheduleWeekly(connectionId: string) {
-    setError(null);
-    try {
-      await apiRequest(`/api/v1/connections/${connectionId}/sync-jobs`, {
+  const scheduleWeekly = useMutation({
+    mutationFn: (connectionId: string) =>
+      apiRequest(`/api/v1/connections/${connectionId}/sync-jobs`, {
         method: "POST",
         body: JSON.stringify({ schedule_type: "weekly", schedule_time: "09:00", weekday: 1 }),
-      });
-      await loadConnections();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update schedule");
-    }
-  }
-
-  async function loadSyncRuns(connectionId: string) {
-    setError(null);
-    try {
-      const data = await apiRequest<SyncRun[]>(`/api/v1/connections/${connectionId}/sync-runs`);
-      setSyncRuns((current) => ({ ...current, [connectionId]: data }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sync runs");
-    }
-  }
+      }),
+    onSuccess: async () => {
+      setPageError(null);
+      await refreshConnections();
+    },
+    onError: (error) => setPageError(error instanceof Error ? error.message : "Failed to update schedule"),
+  });
 
   function renderConnectorForm() {
-    if (connectorType === "csv") {
+    if (connectorType === "file_upload") {
       return (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
-          <p className="mb-3 text-sm font-medium text-slate-700">CSV source</p>
-          <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)} />
-          <p className="mt-2 text-xs text-slate-500">Upload a local CSV to create a workspace dataset immediately.</p>
+          <p className="mb-3 text-sm font-medium text-slate-700">Local file source</p>
+          <input type="file" accept=".csv,.tsv,.txt,.json,.jsonl,.ndjson,.xlsx,.xls,.ods,.parquet,.xml" onChange={(event) => setUploadedFile(event.target.files?.[0] ?? null)} />
+          <p className="mt-2 text-xs text-slate-500">Upload common analyst file formats directly. Supported: CSV, TSV, TXT, JSON, JSONL, Excel, ODS, Parquet, and XML.</p>
         </div>
       );
     }
@@ -233,7 +228,7 @@ export default function ConnectionsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm text-slate-600">Connection URI</label>
-            <Input value={forms.postgresql.uri} onChange={(e) => setConnectorField("postgresql", "uri", e.target.value)} />
+            <Input value={forms.postgresql.uri} onChange={(event) => setConnectorField("postgresql", "uri", event.target.value)} />
           </div>
         </div>
       );
@@ -244,7 +239,7 @@ export default function ConnectionsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm text-slate-600">Connection URI</label>
-            <Input value={forms.mysql.uri} onChange={(e) => setConnectorField("mysql", "uri", e.target.value)} />
+            <Input value={forms.mysql.uri} onChange={(event) => setConnectorField("mysql", "uri", event.target.value)} />
           </div>
         </div>
       );
@@ -255,10 +250,7 @@ export default function ConnectionsPage() {
         <div className="grid grid-cols-1 gap-3">
           <div>
             <label className="mb-1 block text-sm text-slate-600">Published CSV export URL</label>
-            <Input
-              value={forms.google_sheets.csv_export_url}
-              onChange={(e) => setConnectorField("google_sheets", "csv_export_url", e.target.value)}
-            />
+            <Input value={forms.google_sheets.csv_export_url} onChange={(event) => setConnectorField("google_sheets", "csv_export_url", event.target.value)} />
           </div>
         </div>
       );
@@ -268,38 +260,26 @@ export default function ConnectionsPage() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm text-slate-600">Username</label>
-          <Input value={forms.salesforce.username} onChange={(e) => setConnectorField("salesforce", "username", e.target.value)} />
+          <Input value={forms.salesforce.username} onChange={(event) => setConnectorField("salesforce", "username", event.target.value)} />
         </div>
         <div>
           <label className="mb-1 block text-sm text-slate-600">Password</label>
-          <Input type="password" value={forms.salesforce.password} onChange={(e) => setConnectorField("salesforce", "password", e.target.value)} />
+          <Input type="password" value={forms.salesforce.password} onChange={(event) => setConnectorField("salesforce", "password", event.target.value)} />
         </div>
         <div>
           <label className="mb-1 block text-sm text-slate-600">Security token</label>
-          <Input
-            type="password"
-            value={forms.salesforce.security_token}
-            onChange={(e) => setConnectorField("salesforce", "security_token", e.target.value)}
-          />
+          <Input type="password" value={forms.salesforce.security_token} onChange={(event) => setConnectorField("salesforce", "security_token", event.target.value)} />
         </div>
         <div>
           <label className="mb-1 block text-sm text-slate-600">Domain</label>
-          <select
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={forms.salesforce.domain}
-            onChange={(e) => setConnectorField("salesforce", "domain", e.target.value)}
-          >
+          <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={forms.salesforce.domain} onChange={(event) => setConnectorField("salesforce", "domain", event.target.value)}>
             <option value="login">Production</option>
             <option value="test">Sandbox</option>
           </select>
         </div>
         <div className="md:col-span-2">
           <label className="mb-1 block text-sm text-slate-600">Object name</label>
-          <Input
-            value={forms.salesforce.object_name}
-            onChange={(e) => setConnectorField("salesforce", "object_name", e.target.value)}
-            placeholder="Opportunity"
-          />
+          <Input value={forms.salesforce.object_name} onChange={(event) => setConnectorField("salesforce", "object_name", event.target.value)} placeholder="Opportunity" />
         </div>
       </div>
     );
@@ -319,19 +299,21 @@ export default function ConnectionsPage() {
           <CardTitle>Add connection</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={handleCreate}>
+          <form
+            className="space-y-4"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              createConnection.mutate();
+            }}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div>
                 <label className="mb-1 block text-sm text-slate-600">Connection name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Revenue Source" />
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Revenue Source" />
               </div>
               <div>
                 <label className="mb-1 block text-sm text-slate-600">Connector</label>
-                <select
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={connectorType}
-                  onChange={(e) => setConnectorType(e.target.value as ConnectorType)}
-                >
+                <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={connectorType} onChange={(event) => setConnectorType(event.target.value as ConnectorType)}>
                   {connectorOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -340,8 +322,8 @@ export default function ConnectionsPage() {
                 </select>
               </div>
               <div className="flex items-end">
-                <Button type="submit" className="w-full" disabled={creating}>
-                  {creating ? "Creating..." : "Create connection"}
+                <Button type="submit" className="w-full" disabled={createConnection.isPending}>
+                  {createConnection.isPending ? "Creating..." : "Create connection"}
                 </Button>
               </div>
             </div>
@@ -352,46 +334,65 @@ export default function ConnectionsPage() {
               <div className="mt-4">{renderConnectorForm()}</div>
             </div>
           </form>
-          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          {pageError ? <p className="mt-3 text-sm text-red-600">{pageError}</p> : null}
+          {connectionsQuery.error ? <p className="mt-3 text-sm text-red-600">{connectionsQuery.error instanceof Error ? connectionsQuery.error.message : "Failed to load connections"}</p> : null}
         </CardContent>
       </Card>
 
+      {connectionsQuery.isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        {connections.map((connection) => (
+        {(connectionsQuery.data ?? []).map((connection) => (
           <Card key={connection.id}>
             <CardHeader>
-              <CardTitle>{connection.name}</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>{connection.name}</CardTitle>
+                <Badge tone={toneForStatus(connection.status)}>{connection.status}</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="mb-3 flex flex-wrap gap-4 text-xs text-slate-500">
                 <span>Type: {connectorLabel(connection.connector_type)}</span>
-                <span>Status: {connection.status}</span>
                 <span>Frequency: {connection.sync_frequency}</span>
                 <span>Last sync: {connection.last_synced_at ?? "Never"}</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => discover(connection.id)}>
+                <Button variant="secondary" disabled={discoverConnection.isPending} onClick={() => discoverConnection.mutate(connection.id)}>
                   Discover schema
                 </Button>
-                <Button variant="secondary" onClick={() => sync(connection.id)}>
+                <Button variant="secondary" disabled={syncConnection.isPending} onClick={() => syncConnection.mutate(connection.id)}>
                   Manual sync
                 </Button>
-                <Button variant="ghost" onClick={() => scheduleWeekly(connection.id)}>
+                <Button variant="ghost" disabled={scheduleWeekly.isPending} onClick={() => scheduleWeekly.mutate(connection.id)}>
                   Set weekly sync
                 </Button>
-                <Button variant="ghost" onClick={() => loadSyncRuns(connection.id)}>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setActiveLogConnectionId(connection.id);
+                    void queryClient.invalidateQueries({ queryKey: ["sync-runs", connection.id] });
+                  }}
+                >
                   View sync logs
                 </Button>
               </div>
 
-              {(syncRuns[connection.id] ?? []).length ? (
-                <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">
-                  {(syncRuns[connection.id] ?? []).map((run) => (
-                    <div key={run.id} className="rounded border border-slate-200 bg-white p-2">
-                      <p className="font-medium">
-                        {run.status.toUpperCase()} - {run.records_synced} records
-                      </p>
-                      <p className="text-slate-500">Started: {new Date(run.started_at).toLocaleString()}</p>
+              {activeLogConnectionId === connection.id && syncRunsQuery.data?.length ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                  {syncRunsQuery.data.map((run) => (
+                    <div key={run.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">
+                          {run.status.toUpperCase()} - {run.records_synced} records
+                        </p>
+                        <Badge tone={toneForStatus(run.status)}>{run.status}</Badge>
+                      </div>
+                      <p className="mt-1 text-slate-500">Started: {new Date(run.started_at).toLocaleString()}</p>
                       <p className="text-slate-500">{run.message ?? "No errors"}</p>
                     </div>
                   ))}
@@ -401,6 +402,13 @@ export default function ConnectionsPage() {
           </Card>
         ))}
       </div>
+
+      {!connectionsQuery.isLoading && !connectionsQuery.data?.length ? (
+        <EmptyState>
+          <EmptyStateTitle>No connections yet</EmptyStateTitle>
+          <EmptyStateBody>Add a connector to start schema discovery, sync, and semantic modeling.</EmptyStateBody>
+        </EmptyState>
+      ) : null}
 
       {preview ? (
         <Card>
@@ -416,9 +424,7 @@ export default function ConnectionsPage() {
                     <p className="text-sm font-semibold text-slate-900">{dataset.name}</p>
                     <p className="text-xs text-slate-500">Source table: {dataset.source_table}</p>
                   </div>
-                  <span className="rounded-full bg-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700">
-                    {dataset.fields.length} fields
-                  </span>
+                  <Badge tone="default">{dataset.fields.length} fields</Badge>
                 </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {dataset.fields.map((field) => (
@@ -437,3 +443,5 @@ export default function ConnectionsPage() {
     </section>
   );
 }
+
+

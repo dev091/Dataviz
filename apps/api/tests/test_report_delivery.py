@@ -85,3 +85,10 @@ def test_report_schedule_delivery_logs(client: TestClient):
     assert audit.status_code == 200, audit.text
     actions = [row["action"] for row in audit.json()]
     assert "report_schedule.delivered" in actions
+
+    delivery_logs = client.get("/api/v1/alerts/delivery-logs", headers=headers)
+    assert delivery_logs.status_code == 200, delivery_logs.text
+    payload = delivery_logs.json()
+    assert payload
+    assert payload[0]["status"] == "delivered"
+    assert payload[0]["recipients"] == ["exec@dataviz.com"]

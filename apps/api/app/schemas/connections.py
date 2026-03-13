@@ -37,5 +37,7 @@ class SyncRunResponse(BaseModel):
     logs: dict[str, Any]
 
 
-class CsvUploadResponse(BaseModel):
+class FileUploadResponse(BaseModel):
     file_path: str
+    file_name: str
+    file_format: str

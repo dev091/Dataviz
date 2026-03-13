@@ -6,6 +6,7 @@ from app.models.entities import User
 from app.schemas.nl import NLQueryRequest, NLQueryResponse
 from app.services.audit import write_audit_log
 from app.services.nl import execute_nl_query
+from app.models.entities import AIActionHistory
 
 
 router = APIRouter()
@@ -39,11 +40,26 @@ def run_nl_query(
         workspace_id=workspace_id,
         metadata={"question": payload.question},
     )
+
+    action_history = AIActionHistory(
+        workspace_id=workspace_id,
+        actor_id=current_user.id,
+        action_type="nl_query",
+        input_summary=payload.question,
+        output_summary=session.summary,
+        artifact_ref=session.id,
+        artifact_type="ai_query_session",
+        confidence_score=1.0,
+        status="completed",
+        metadata_json={"question": payload.question, "sql": session.sql_text}
+    )
+    db.add(action_history)
     db.commit()
 
     followups = getattr(session, "_followups", [])
     insights = getattr(session, "_insights", [])
     trace = getattr(session, "_agent_trace", session.result.get("agent_trace", []))
+    related_queries = getattr(session, "_related_queries", session.result.get("related_queries", []))
     plan = session.plan.get("query_plan", session.plan) if isinstance(session.plan, dict) else {}
 
     return NLQueryResponse(
@@ -56,5 +72,6 @@ def run_nl_query(
         summary=session.summary,
         insights=insights,
         follow_up_questions=followups,
+        related_queries=related_queries,
         created_at=session.created_at,
     )

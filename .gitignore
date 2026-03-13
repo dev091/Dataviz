@@ -18,3 +18,12 @@ apps/api/*.db
 apps/web/test-results/
 apps/web/tsconfig.tsbuildinfo
 .DS_Store
+infrastructure/tmp/
+apps/api/apps/
+temp_storage*/
+test_*.db
+diag_output.txt
+errors_only.txt
+test_output.txt
+run_test.py
+test_composer.py

@@ -34,7 +34,7 @@ class AIOrchestrator:
             f"Question: {question}\n"
             f"Metrics: {metric_names}\n"
             f"Dimensions: {dimension_names}\n"
-            f"Return JSON only."
+            "Return JSON only."
         )
 
         try:
@@ -47,8 +47,18 @@ class AIOrchestrator:
         except Exception:
             return base_plan
 
-    def summarize(self, *, question: str, rows: list[dict[str, Any]], metrics: list[str], dimensions: list[str], insights: list[dict[str, Any]]) -> str:
+    def summarize(
+        self,
+        *,
+        question: str,
+        rows: list[dict[str, Any]],
+        metrics: list[str],
+        dimensions: list[str],
+        insights: list[dict[str, Any]],
+        related_queries: list[dict[str, Any]] | None = None,
+    ) -> str:
         summary_prompt = self._load_prompt("summary.txt")
+        related = related_queries or []
         if not summary_prompt:
             return deterministic_summary(question, rows, metrics, dimensions)
 
@@ -58,7 +68,8 @@ class AIOrchestrator:
             f"Metrics: {metrics}\n"
             f"Dimensions: {dimensions}\n"
             f"Rows: {json.dumps(rows[:30], default=str)}\n"
-            f"Insights: {json.dumps(insights[:5], default=str)}"
+            f"Insights: {json.dumps(insights[:5], default=str)}\n"
+            f"Related prior analyses: {json.dumps(related[:3], default=str)}"
         )
 
         try:
@@ -70,7 +81,15 @@ class AIOrchestrator:
 
         return deterministic_summary(question, rows, metrics, dimensions)
 
-    def suggest_followups(self, *, question: str, rows: list[dict[str, Any]], metrics: list[str], dimensions: list[str]) -> list[str]:
+    def suggest_followups(
+        self,
+        *,
+        question: str,
+        rows: list[dict[str, Any]],
+        metrics: list[str],
+        dimensions: list[str],
+        related_queries: list[dict[str, Any]] | None = None,
+    ) -> list[str]:
         followups_prompt = self._load_prompt("followups.txt")
 
         default = [
@@ -78,6 +97,21 @@ class AIOrchestrator:
             f"Break this down further by {dimensions[0]}." if dimensions else "Can we break this down by region?",
             "Which segment is at highest risk next period?",
         ]
+
+        related = related_queries or []
+        if related:
+            prior_questions = []
+            for item in related:
+                prior_question = str(item.get("question", "")).strip()
+                if not prior_question:
+                    continue
+                if prior_question.lower() == question.strip().lower():
+                    continue
+                if prior_question in prior_questions:
+                    continue
+                prior_questions.append(prior_question)
+            if prior_questions:
+                default = [prior_questions[0], *default][:3]
 
         if not followups_prompt:
             return default
@@ -88,6 +122,7 @@ class AIOrchestrator:
             f"Metrics: {metrics}\n"
             f"Dimensions: {dimensions}\n"
             f"Rows: {json.dumps(rows[:20], default=str)}\n"
+            f"Related prior analyses: {json.dumps(related[:3], default=str)}\n"
             "Return JSON array only."
         )
 
@@ -95,7 +130,11 @@ class AIOrchestrator:
             raw = self.provider.complete(prompt, json_mode=True)
             value = json.loads(raw)
             if isinstance(value, list) and value:
-                return [str(item) for item in value][:3]
+                merged = [str(item) for item in value if str(item).strip()]
+                for item in default:
+                    if item not in merged:
+                        merged.append(item)
+                return merged[:3]
         except Exception:
             pass
 

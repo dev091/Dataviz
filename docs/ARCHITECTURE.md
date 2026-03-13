@@ -7,6 +7,9 @@
 - `packages/connectors` (connector framework + implementations)
 - `packages/semantic` (query plan IR, validation, SQL builder)
 - `packages/analytics` (chart recommendation, deterministic insights/summaries)
+- `packages/executive` (launch-pack registry, migration matching, report-pack helpers)
+- `packages/dataprep` (AI Data Prep Autopilot heuristics and lineage helpers)
+- `packages/monitoring` (proactive monitoring policies, routing, and escalation helpers)
 - `packages/prompts` (AI prompt templates)
 - `infrastructure` (docker, db init, scripts)
 
@@ -82,3 +85,5 @@ Agent execution trace is returned to the client and stored with query sessions f
 - Semantic package and analytics package isolated for upgrade
 - Storage service interface supports future S3 swap
 - Agent interface allows plugging additional specialist agents without changing API contracts
+
+

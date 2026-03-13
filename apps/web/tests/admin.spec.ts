@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const authState = {
   accessToken: "token-123",
@@ -54,6 +54,23 @@ test("admin billing controls launch checkout and portal flows", async ({ page })
     await route.fulfill({ json: [{ id: "insight-1", insight_type: "trend", title: "Revenue accelerating", body: "Growth is strongest in enterprise accounts.", created_at: "2026-03-06T00:00:00Z" }] });
   });
 
+  await page.route("**/api/v1/admin/ai-trust-history", async (route) => {
+    await route.fulfill({
+      json: [
+        {
+          id: "trust-1",
+          artifact_type: "nl_query",
+          title: "What changed in enterprise revenue this quarter?",
+          summary: "Enterprise revenue accelerated after renewals improved in February.",
+          source_label: "Revenue Model",
+          prompt_or_trigger: "What changed in enterprise revenue this quarter?",
+          trust_signals: ["semantic-grounded", "query-plan", "agent-trace"],
+          created_at: "2026-03-07T12:00:00Z",
+        },
+      ],
+    });
+  });
+
   await page.route("**/api/v1/admin/subscription", async (route) => {
     if (route.request().method() === "PUT") {
       const body = JSON.parse(route.request().postData() ?? "{}");
@@ -96,20 +113,17 @@ test("admin billing controls launch checkout and portal flows", async ({ page })
 
   await expect(page.getByText("Subscription and Entitlements")).toBeVisible();
   await expect(page.getByText("Northstar Analytics", { exact: true })).toBeVisible();
+  await expect(page.getByText("AI Trust History")).toBeVisible();
+  await expect(page.getByText("What changed in enterprise revenue this quarter?", { exact: true })).toBeVisible();
+  await expect(page.getByText("semantic-grounded")).toBeVisible();
 
   await page.locator("select").nth(1).selectOption("growth");
   await page.getByRole("button", { name: "Start self-serve checkout" }).click();
   await expect(page.getByText("Checkout session created with stripe.")).toBeVisible();
   await expect(page.getByText("cus_123")).toBeVisible();
-
-  const checkoutUrl = await page.evaluate(() => Reflect.get(window, "__lastOpened"));
-  expect(checkoutUrl).toBe("https://billing.example/checkout/cs_123");
+  await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__lastOpened"))).toBe("https://billing.example/checkout/cs_123");
 
   await page.getByRole("button", { name: "Open billing portal" }).click();
   await expect(page.getByText("Billing portal opened through stripe.")).toBeVisible();
-  const portalUrl = await page.evaluate(() => Reflect.get(window, "__lastOpened"));
-  expect(portalUrl).toBe("https://billing.example/portal/bps_123");
+  await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__lastOpened"))).toBe("https://billing.example/portal/bps_123");
 });
-
-
-

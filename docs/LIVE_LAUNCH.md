@@ -1,10 +1,16 @@
-﻿# Live Launch Playbook
+# Live Launch Playbook
 
-This playbook drives the project from MVP-complete to production-live.
+This playbook drives the project from locally validated product foundation to production-live.
 
 ## Gate Status
 - Complete in repo: L1-L4, L9-L11
 - Still requires real environment execution: L5-L8, L12-L14
+
+## Recommended Verification Sequence
+1. Baseline platform checks:
+   - `powershell -ExecutionPolicy Bypass -File infrastructure/scripts/ops-verify.ps1 -ApiBase http://localhost:8000 -WebBase http://localhost:3000 -Email owner@dataviz.com -Password Password123! -IncludeBilling -IncludeLoad -LoadUsers 5 -LoadSpawnRate 2 -LoadDuration 30s`
+2. Review evidence under `infrastructure/tmp/ops-verify`.
+3. Re-run the same script against staging with real environment secrets and enable `-IncludeConnectors` when live connector credentials are available.
 
 ## Commercial Boundary
 - Implemented in repo:
@@ -59,7 +65,7 @@ This playbook drives the project from MVP-complete to production-live.
 1. Install load test tool:
    - `pip install -r infrastructure/perf/requirements.txt`
 2. Run baseline:
-   - `powershell -ExecutionPolicy Bypass -File infrastructure/scripts/load-test.ps1 -Host http://localhost:8000 -Users 50 -SpawnRate 10 -Duration 5m`
+   - `powershell -ExecutionPolicy Bypass -File infrastructure/scripts/load-test.ps1 -ApiBase http://localhost:8000 -Users 50 -SpawnRate 10 -Duration 5m`
 3. Track p95 latency, error rate, and throughput.
 4. Include billing checkout and admin settings paths in smoke traffic after deploying Stripe config.
 
@@ -67,8 +73,10 @@ This playbook drives the project from MVP-complete to production-live.
 - Implemented:
   - `.github/workflows/ci.yml`
   - `.github/workflows/release.yml`
+  - `.github/workflows/ops-verify.yml`
   - `infrastructure/scripts/backend-tests.ps1`
   - `infrastructure/scripts/ci-gates.ps1`
+  - `infrastructure/scripts/ops-verify.ps1`
   - Playwright smoke job for admin/commercial and connector setup screens
 
 ## L10. Observability

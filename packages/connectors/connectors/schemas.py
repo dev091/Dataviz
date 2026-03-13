@@ -11,6 +11,8 @@ class MySQLConfig(BaseModel):
 
 class CSVConfig(BaseModel):
     file_path: str
+    file_format: str | None = Field(default=None, description="Detected or explicit uploaded file format")
+    sheet_name: str | None = Field(default=None, description="Optional sheet name for spreadsheet sources")
 
 
 class GoogleSheetsConfig(BaseModel):

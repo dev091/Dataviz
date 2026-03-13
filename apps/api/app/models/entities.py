@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -7,9 +7,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from app.db.base import Base
+from pgvector.sqlalchemy import Vector
 
 
-JsonType = JSON().with_variant(JSONB, "postgresql")
+JsonType = JSON().with_variant(JSONB, 'postgresql')
+EmbeddingType = JSON().with_variant(Vector(16), 'postgresql')
 
 
 def utcnow() -> datetime:
@@ -128,6 +130,8 @@ class Dataset(TimestampMixin, Base):
     source_table: Mapped[str] = mapped_column(String(255), nullable=False)
     physical_table: Mapped[str] = mapped_column(String(255), nullable=False)
     row_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    quality_status: Mapped[str] = mapped_column(String(32), default="unknown", nullable=False)
+    quality_profile: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     last_sync_run_id: Mapped[str | None] = mapped_column(ForeignKey("sync_runs.id", ondelete="SET NULL"), nullable=True)
 
 
@@ -307,6 +311,7 @@ class AIQuerySession(Base):
     semantic_model_id: Mapped[str] = mapped_column(ForeignKey("semantic_models.id", ondelete="CASCADE"), nullable=False)
 
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    question_embedding: Mapped[list[float] | None] = mapped_column(EmbeddingType, nullable=True)
     plan: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     sql_text: Mapped[str] = mapped_column(Text, nullable=False)
     result: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
@@ -328,6 +333,76 @@ class InsightArtifact(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MetricLineage(TimestampMixin, Base):
+    """Tracks provenance of each semantic metric back to source dataset fields."""
+    __tablename__ = "metric_lineage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    semantic_model_id: Mapped[str] = mapped_column(ForeignKey("semantic_models.id", ondelete="CASCADE"), nullable=False)
+    semantic_metric_id: Mapped[str] = mapped_column(ForeignKey("semantic_metrics.id", ondelete="CASCADE"), nullable=False)
+    source_dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
+    source_field: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)  # "raw_field", "calculated_field", "aggregation"
+    transformation_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+
+
+class TransformationLineage(TimestampMixin, Base):
+    """Tracks data prep transformation chain per dataset with step ordering."""
+    __tablename__ = "transformation_lineage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    step_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    step_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "clean", "type_coerce", "normalize", "join", "union"
+    input_fields: Mapped[list] = mapped_column(JsonType, default=list, nullable=False)
+    output_fields: Mapped[list] = mapped_column(JsonType, default=list, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="applied", nullable=False)  # "applied", "rolled_back"
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AIActionHistory(TimestampMixin, Base):
+    """Unified table for ALL AI-generated artifact events across the platform."""
+    __tablename__ = "ai_action_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # action_type values: nl_query, report_pack, proactive_insight, auto_compose,
+    #   semantic_draft, data_prep_suggestion, migration_bootstrap
+    input_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    output_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    artifact_ref: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    artifact_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="completed", nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+
+
+class ArtifactFeedback(TimestampMixin, Base):
+    """User feedback on AI-generated artifacts for usefulness instrumentation."""
+    __tablename__ = "artifact_feedback"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # artifact_type values: alert, insight, nl_query, report_pack, dashboard_compose, semantic_draft, data_prep
+    artifact_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    rating: Mapped[str] = mapped_column(String(16), nullable=False)  # "useful", "not_useful", "dismissed", "snoozed"
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+
+
 
 
 

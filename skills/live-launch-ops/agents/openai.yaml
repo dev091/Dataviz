@@ -1,3 +1,3 @@
 display_name: Live Launch Ops
-short_description: Drive staging, launch, and operational readiness to production-live.
-default_prompt: Complete remaining live-launch tasks, use the existing operational scripts, and update the checklist with verified status.
+short_description: Drive staging, billing, launch, and operational readiness to production-live.
+default_prompt: Use $live-launch-ops to run ops-verify, preflight, billing smoke, load, backup, or cutover checks and update the launch checklist with verified status.

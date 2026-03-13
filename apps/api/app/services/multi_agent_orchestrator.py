@@ -64,6 +64,7 @@ class MultiAgentOrchestrator:
         joins: list[dict[str, str]],
         metric_sql: dict[str, str],
         dimension_sql: dict[str, str],
+        related_queries: list[dict[str, Any]] | None = None,
     ) -> MultiAgentQueryResult:
         trace: list[dict[str, Any]] = []
 
@@ -108,6 +109,7 @@ class MultiAgentOrchestrator:
             metrics=plan.metrics,
             dimensions=plan.dimensions,
             insights=insights,
+            related_queries=related_queries,
         )
         trace.append(narrative_step)
 

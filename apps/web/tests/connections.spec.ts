@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const authState = {
   accessToken: "token-123",
@@ -28,7 +28,8 @@ test("connection setup exposes typed forms for each connector", async ({ page })
 
   await page.goto("/connections");
 
-  await expect(page.getByText("CSV source")).toBeVisible();
+  await expect(page.getByText("Local file source")).toBeVisible();
+  await expect(page.getByText("Supported: CSV, TSV, TXT, JSON, JSONL, Excel, ODS, Parquet, and XML.")).toBeVisible();
 
   await page.locator("select").nth(1).selectOption("postgresql");
   await expect(page.getByText("Connect a transactional or warehouse Postgres source.")).toBeVisible();

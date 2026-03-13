@@ -141,6 +141,7 @@ class NarrativeAgent(BaseAgent):
         metrics: list[str],
         dimensions: list[str],
         insights: list[dict[str, Any]],
+        related_queries: list[dict[str, Any]] | None = None,
     ) -> tuple[str, list[str], dict[str, Any]]:
         step = self.make_step({"question": question, "metrics": metrics, "dimensions": dimensions, "row_count": len(rows)})
         step.start()
@@ -151,14 +152,16 @@ class NarrativeAgent(BaseAgent):
                 metrics=metrics,
                 dimensions=dimensions,
                 insights=insights,
+                related_queries=related_queries,
             )
             followups = ai_orchestrator.suggest_followups(
                 question=question,
                 rows=rows,
                 metrics=metrics,
                 dimensions=dimensions,
+                related_queries=related_queries,
             )
-            step.complete({"summary_len": len(summary), "followup_count": len(followups)})
+            step.complete({"summary_len": len(summary), "followup_count": len(followups), "related_queries": len(related_queries or [])})
             return summary, followups, step.to_dict()
         except Exception as exc:  # noqa: BLE001
             step.fail(exc)

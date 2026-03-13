@@ -12,6 +12,11 @@ celery==5.5.3
 redis==6.4.0
 httpx==0.28.1
 pandas==2.3.2
+openpyxl==3.1.5
+xlrd==2.0.1
+odfpy==1.4.1
+pyarrow==21.0.0
+lxml==6.0.1
 openai==1.108.1
 numpy==2.3.3
 python-dateutil==2.9.0.post0
@@ -21,4 +26,3 @@ email-validator==2.3.0
 PyMySQL==1.1.2
 simple-salesforce==1.12.9
 bcrypt==4.1.3
-

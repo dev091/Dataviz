@@ -6,15 +6,20 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_db, get_workspace_id, require_role
-from app.models.entities import AlertEvent, AlertRule, Dashboard, ReportSchedule, User
+from app.models.entities import AlertEvent, AlertRule, AuditLog, Dashboard, InsightArtifact, ReportSchedule, SemanticMetric, User
 from app.schemas.alerts import (
     AlertRuleCreateRequest,
     AlertRuleResponse,
+    DeliveryLogResponse,
+    ProactiveDigestResponse,
+    ProactiveInsightResponse,
+    ProactiveInsightRunResponse,
     ReportScheduleCreateRequest,
     ReportScheduleResponse,
 )
 from app.services.audit import write_audit_log
 from app.services.nl import evaluate_alert_metric
+from app.services.proactive_insights import build_proactive_digest, run_proactive_insight_agents
 
 
 router = APIRouter()
@@ -88,6 +93,7 @@ def list_report_schedules(
     current_user: User = Depends(require_role("Viewer")),
     db: Session = Depends(get_db),
 ) -> list[ReportScheduleResponse]:
+    _ = current_user
     rows = db.scalars(
         select(ReportSchedule).where(ReportSchedule.workspace_id == workspace_id).order_by(ReportSchedule.created_at.desc())
     ).all()
@@ -105,6 +111,46 @@ def list_report_schedules(
         )
         for row in rows
     ]
+
+
+@router.get("/delivery-logs", response_model=list[DeliveryLogResponse])
+def list_delivery_logs(
+    workspace_id: str = Depends(get_workspace_id),
+    current_user: User = Depends(require_role("Viewer")),
+    db: Session = Depends(get_db),
+) -> list[DeliveryLogResponse]:
+    _ = current_user
+    rows = db.execute(
+        select(AuditLog, ReportSchedule, Dashboard)
+        .join(ReportSchedule, ReportSchedule.id == AuditLog.entity_id, isouter=True)
+        .join(Dashboard, Dashboard.id == ReportSchedule.dashboard_id, isouter=True)
+        .where(
+            AuditLog.workspace_id == workspace_id,
+            AuditLog.action.in_(["report_schedule.delivered", "report_schedule.delivery_failed"]),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(100)
+    ).all()
+
+    payload: list[DeliveryLogResponse] = []
+    for audit, schedule, dashboard in rows:
+        metadata = audit.metadata_json or {}
+        payload.append(
+            DeliveryLogResponse(
+                id=audit.id,
+                schedule_id=audit.entity_id,
+                schedule_name=schedule.name if schedule else metadata.get("schedule_name", "Unknown schedule"),
+                dashboard_id=(schedule.dashboard_id if schedule else metadata.get("dashboard_id", "")),
+                dashboard_name=dashboard.name if dashboard else None,
+                status="delivered" if audit.action.endswith("delivered") else "failed",
+                provider=metadata.get("provider"),
+                message_id=metadata.get("message_id"),
+                recipients=list(metadata.get("email_to", [])) if isinstance(metadata.get("email_to", []), list) else [],
+                error=metadata.get("error"),
+                created_at=audit.created_at,
+            )
+        )
+    return payload
 
 
 @router.post("/rules", response_model=AlertRuleResponse)
@@ -159,6 +205,7 @@ def list_rules(
     current_user: User = Depends(require_role("Viewer")),
     db: Session = Depends(get_db),
 ) -> list[AlertRuleResponse]:
+    _ = current_user
     rows = db.scalars(select(AlertRule).where(AlertRule.workspace_id == workspace_id).order_by(AlertRule.created_at.desc())).all()
     return [
         AlertRuleResponse(
@@ -228,6 +275,7 @@ def list_events(
     current_user: User = Depends(require_role("Viewer")),
     db: Session = Depends(get_db),
 ) -> list[dict]:
+    _ = current_user
     rows = db.execute(
         select(AlertEvent, AlertRule)
         .join(AlertRule, AlertRule.id == AlertEvent.alert_rule_id)
@@ -247,3 +295,71 @@ def list_events(
         }
         for event, rule in rows
     ]
+
+
+@router.get("/proactive-insights", response_model=list[ProactiveInsightResponse])
+def list_proactive_insights(
+    workspace_id: str = Depends(get_workspace_id),
+    current_user: User = Depends(require_role("Viewer")),
+    db: Session = Depends(get_db),
+) -> list[ProactiveInsightResponse]:
+    _ = current_user
+    rows = db.execute(
+        select(InsightArtifact, SemanticMetric)
+        .join(SemanticMetric, SemanticMetric.id == InsightArtifact.metric_id, isouter=True)
+        .where(InsightArtifact.workspace_id == workspace_id)
+        .order_by(InsightArtifact.created_at.desc())
+        .limit(100)
+    ).all()
+    payload: list[ProactiveInsightResponse] = []
+    for artifact, metric in rows:
+        data = artifact.data or {}
+        payload.append(
+            ProactiveInsightResponse(
+                id=artifact.id,
+                insight_type=artifact.insight_type,
+                title=artifact.title,
+                body=artifact.body,
+                severity=str(data.get("severity") or "default"),
+                audiences=list(data.get("audiences", [])) if isinstance(data.get("audiences", []), list) else [],
+                investigation_paths=list(data.get("investigation_paths", [])) if isinstance(data.get("investigation_paths", []), list) else [],
+                suggested_actions=list(data.get("suggested_actions", [])) if isinstance(data.get("suggested_actions", []), list) else [],
+                escalation_policy=data.get("escalation_policy") if isinstance(data.get("escalation_policy"), dict) else None,
+                metric_name=metric.label if metric else data.get("metric"),
+                created_at=artifact.created_at,
+            )
+        )
+    return payload
+
+
+@router.get("/proactive-digest", response_model=ProactiveDigestResponse)
+def get_proactive_digest(
+    audience: str | None = None,
+    workspace_id: str = Depends(get_workspace_id),
+    current_user: User = Depends(require_role("Viewer")),
+    db: Session = Depends(get_db),
+) -> ProactiveDigestResponse:
+    _ = current_user
+    return ProactiveDigestResponse(**build_proactive_digest(db, workspace_id=workspace_id, audience=audience))
+
+
+@router.post("/proactive-insights/run", response_model=ProactiveInsightRunResponse)
+def run_proactive_insights(
+    workspace_id: str = Depends(get_workspace_id),
+    current_user: User = Depends(require_role("Analyst")),
+    db: Session = Depends(get_db),
+) -> ProactiveInsightRunResponse:
+    _ = workspace_id
+    created = run_proactive_insight_agents(db)
+    write_audit_log(
+        db,
+        action="insight.proactive.manual_run",
+        entity_type="insight_artifact",
+        entity_id=current_user.id,
+        user=current_user,
+        organization_id=None,
+        workspace_id=workspace_id,
+        metadata={"created": created},
+    )
+    db.commit()
+    return ProactiveInsightRunResponse(created=created)

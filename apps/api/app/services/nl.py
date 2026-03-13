@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import AIQuerySession, InsightArtifact, SemanticMetric, User
 from app.services.multi_agent_orchestrator import multi_agent_orchestrator
+from app.services.query_memory import embed_text, retrieve_related_queries
 from app.services.semantic import semantic_context
 
 
@@ -16,6 +17,14 @@ def execute_nl_query(db: Session, *, workspace_id: str, user: User, semantic_mod
 
     metric_names = [metric.name for metric in metrics if metric.visibility == "public"]
     dimension_names = [dimension.name for dimension in dimensions if dimension.visibility == "public"]
+    question_embedding = embed_text(question)
+    related_queries = retrieve_related_queries(
+        db,
+        workspace_id=workspace_id,
+        semantic_model_id=semantic_model_id,
+        question=question,
+        question_embedding=question_embedding,
+    )
 
     result = multi_agent_orchestrator.run_query(
         db=db,
@@ -27,6 +36,7 @@ def execute_nl_query(db: Session, *, workspace_id: str, user: User, semantic_mod
         joins=context["joins"],
         metric_sql=context["metric_sql"],
         dimension_sql=context["dimension_sql"],
+        related_queries=related_queries,
     )
 
     session = AIQuerySession(
@@ -34,12 +44,14 @@ def execute_nl_query(db: Session, *, workspace_id: str, user: User, semantic_mod
         user_id=user.id,
         semantic_model_id=semantic_model_id,
         question=question,
+        question_embedding=question_embedding,
         plan={
             "query_plan": result.plan.model_dump(),
             "agent_trace": result.agent_trace,
+            "related_queries": related_queries,
         },
         sql_text=result.sql,
-        result={"rows": result.rows, "agent_trace": result.agent_trace},
+        result={"rows": result.rows, "agent_trace": result.agent_trace, "related_queries": related_queries},
         chart=result.chart,
         summary=result.summary,
         created_at=datetime.now(timezone.utc),
@@ -67,6 +79,7 @@ def execute_nl_query(db: Session, *, workspace_id: str, user: User, semantic_mod
     session._followups = result.followups  # type: ignore[attr-defined]
     session._insights = result.insights  # type: ignore[attr-defined]
     session._agent_trace = result.agent_trace  # type: ignore[attr-defined]
+    session._related_queries = related_queries  # type: ignore[attr-defined]
     return session
 
 

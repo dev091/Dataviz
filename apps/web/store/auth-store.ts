@@ -10,6 +10,7 @@ type AuthState = {
   userId: string | null;
   workspaces: WorkspaceAccess[];
   currentWorkspaceId: string | null;
+  hasHydrated: boolean;
   setSession: (payload: {
     accessToken: string;
     refreshToken: string;
@@ -18,6 +19,7 @@ type AuthState = {
     workspaces: WorkspaceAccess[];
   }) => void;
   selectWorkspace: (workspaceId: string) => void;
+  markHydrated: () => void;
   clear: () => void;
 };
 
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       userId: null,
       workspaces: [],
       currentWorkspaceId: null,
+      hasHydrated: false,
       setSession: ({ accessToken, refreshToken, email, userId, workspaces }) =>
         set({
           accessToken,
@@ -40,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
           currentWorkspaceId: workspaces[0]?.workspace_id ?? null,
         }),
       selectWorkspace: (workspaceId) => set({ currentWorkspaceId: workspaceId }),
+      markHydrated: () => set({ hasHydrated: true }),
       clear: () =>
         set({
           accessToken: null,
@@ -52,6 +56,9 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-store-v1",
+      onRehydrateStorage: () => (state) => {
+        state?.markHydrated();
+      },
     },
   ),
 );

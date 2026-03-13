@@ -19,4 +19,5 @@ class NLQueryResponse(BaseModel):
     summary: str
     insights: list[dict[str, Any]]
     follow_up_questions: list[str]
+    related_queries: list[dict[str, Any]]
     created_at: datetime

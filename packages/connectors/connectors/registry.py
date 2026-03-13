@@ -10,6 +10,7 @@ REGISTRY: dict[str, type[Connector]] = {
     "postgresql": PostgresConnector,
     "mysql": MySQLConnector,
     "csv": CSVConnector,
+    "file_upload": CSVConnector,
     "google_sheets": GoogleSheetsConnector,
     "salesforce": SalesforceConnector,
 }

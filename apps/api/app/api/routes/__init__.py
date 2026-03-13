@@ -1,4 +1,4 @@
-from app.api.routes import admin, alerts, auth, connections, dashboards, nl_analytics, semantic, workspaces
+from app.api.routes import admin, alerts, auth, connections, dashboards, feedback, lineage, nl_analytics, semantic, workspaces
 
 __all__ = [
     "auth",
@@ -9,4 +9,6 @@ __all__ = [
     "nl_analytics",
     "alerts",
     "admin",
+    "lineage",
+    "feedback",
 ]

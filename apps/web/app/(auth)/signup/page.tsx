@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@platform/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
 
 import { apiRequest } from "@/lib/api";
 import { useAuthStore } from "@/store/auth-store";
@@ -97,3 +97,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

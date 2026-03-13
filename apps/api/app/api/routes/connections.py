@@ -1,14 +1,16 @@
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from app.core.deps import get_current_user, get_db, get_workspace_id, require_role
+from app.core.deps import get_db, get_workspace_id, require_role
 from app.models.entities import DataConnection, SyncRun, User, Workspace
 from app.schemas.connections import (
     ConnectionCreateRequest,
     ConnectionResponse,
-    CsvUploadResponse,
+    FileUploadResponse,
     SyncJobRequest,
     SyncRunResponse,
 )
@@ -18,6 +20,20 @@ from app.services.sync import create_or_update_sync_job, discover_connection, ru
 
 
 router = APIRouter()
+
+SUPPORTED_UPLOAD_FORMATS = {
+    ".csv": "csv",
+    ".tsv": "tsv",
+    ".txt": "txt",
+    ".json": "json",
+    ".jsonl": "jsonl",
+    ".ndjson": "jsonl",
+    ".xlsx": "xlsx",
+    ".xls": "xls",
+    ".ods": "ods",
+    ".parquet": "parquet",
+    ".xml": "xml",
+}
 
 
 def _workspace(db: Session, workspace_id: str) -> Workspace:
@@ -34,15 +50,26 @@ def _connection_or_404(db: Session, workspace_id: str, connection_id: str) -> Da
     return conn
 
 
-@router.post("/csv/upload", response_model=CsvUploadResponse)
-async def upload_csv(
+def _detect_upload_format(filename: str | None) -> str:
+    if not filename:
+        raise HTTPException(status_code=400, detail="Uploaded file is missing a filename")
+    suffix = Path(filename).suffix.lower()
+    file_format = SUPPORTED_UPLOAD_FORMATS.get(suffix)
+    if not file_format:
+        supported = ", ".join(sorted({value for value in SUPPORTED_UPLOAD_FORMATS.values()}))
+        raise HTTPException(status_code=400, detail=f"Unsupported file type. Supported formats: {supported}")
+    return file_format
+
+
+@router.post("/files/upload", response_model=FileUploadResponse)
+@router.post("/csv/upload", response_model=FileUploadResponse, include_in_schema=False)
+async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(require_role("Analyst")),
-) -> CsvUploadResponse:
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+) -> FileUploadResponse:
+    file_format = _detect_upload_format(file.filename)
     file_path = await storage.save_upload(file)
-    return CsvUploadResponse(file_path=file_path)
+    return FileUploadResponse(file_path=file_path, file_name=file.filename or "upload", file_format=file_format)
 
 
 @router.get("", response_model=list[ConnectionResponse])

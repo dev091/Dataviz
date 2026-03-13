@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.bootstrap import bootstrap_package_paths
 from app.models.entities import DataConnection, Dataset, DatasetField, SyncJob, SyncRun
+from app.services.data_quality import profile_dataframe
 
 bootstrap_package_paths()
 from connectors.registry import get_connector  # noqa: E402
+from connectors.retry import ConnectorExecutionError  # noqa: E402
 
 
 def _safe_table_name(raw: str) -> str:
@@ -46,7 +48,11 @@ def _next_run(job: SyncJob, now: datetime | None = None) -> datetime | None:
 def discover_connection(connection: DataConnection) -> dict[str, Any]:
     connector = get_connector(connection.connector_type)
     connector.validate_config(connection.config)
-    return connector.preview_schema(connection.config)
+    preview, retry_metadata = connector.call_with_retry("preview_schema", lambda: connector.preview_schema(connection.config))
+    if isinstance(preview, dict):
+        preview.setdefault("meta", {})
+        preview["meta"]["retry"] = retry_metadata.to_dict()
+    return preview
 
 
 def create_or_update_sync_job(db: Session, connection: DataConnection, schedule_type: str, schedule_time: str | None, weekday: int | None) -> SyncJob:
@@ -74,13 +80,20 @@ def run_sync(db: Session, connection: DataConnection, *, job_id: str | None = No
     db.flush()
 
     try:
-        sync_results = connector.sync(connection.config, dataset_name=dataset_name)
+        sync_results, retry_metadata = connector.call_with_retry(
+            "sync",
+            lambda: connector.sync(connection.config, dataset_name=dataset_name),
+        )
         total_rows = 0
-        logs: dict[str, Any] = {"datasets": []}
+        logs: dict[str, Any] = {"datasets": [], "retry": retry_metadata.to_dict()}
 
         for result in sync_results:
             total_rows += result.row_count
             physical_table = f"ws_{connection.workspace_id.replace('-', '')[:8]}_{_safe_table_name(result.dataset_name)}"
+            quality_profile = profile_dataframe(
+                result.dataframe,
+                cleaning=result.logs.get("cleaning") if isinstance(result.logs, dict) else None,
+            )
 
             existing_dataset = db.scalar(
                 select(Dataset).where(
@@ -97,6 +110,8 @@ def run_sync(db: Session, connection: DataConnection, *, job_id: str | None = No
                     source_table=result.dataset_name,
                     physical_table=physical_table,
                     row_count=result.row_count,
+                    quality_status=quality_profile["status"],
+                    quality_profile=quality_profile,
                     last_sync_run_id=run.id,
                 )
                 db.add(dataset)
@@ -105,6 +120,8 @@ def run_sync(db: Session, connection: DataConnection, *, job_id: str | None = No
                 dataset = existing_dataset
                 dataset.physical_table = physical_table
                 dataset.row_count = result.row_count
+                dataset.quality_status = quality_profile["status"]
+                dataset.quality_profile = quality_profile
                 dataset.last_sync_run_id = run.id
                 db.flush()
 
@@ -133,6 +150,7 @@ def run_sync(db: Session, connection: DataConnection, *, job_id: str | None = No
                     "name": result.dataset_name,
                     "rows": result.row_count,
                     "physical_table": physical_table,
+                    "quality_profile": quality_profile,
                     **result.logs,
                 }
             )
@@ -145,9 +163,16 @@ def run_sync(db: Session, connection: DataConnection, *, job_id: str | None = No
         connection.last_synced_at = run.finished_at
         connection.status = "ready"
 
+    except ConnectorExecutionError as exc:
+        run.status = "failed"
+        run.message = str(exc)
+        run.logs = {"retry": exc.to_dict()}
+        run.finished_at = datetime.now(timezone.utc)
+        connection.status = "error"
     except Exception as exc:  # noqa: BLE001
         run.status = "failed"
         run.message = str(exc)
+        run.logs = {"error": str(exc)}
         run.finished_at = datetime.now(timezone.utc)
         connection.status = "error"
 

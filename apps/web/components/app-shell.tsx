@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { PropsWithChildren, useEffect, useMemo } from "react";
 
-import { Button } from "@platform/ui";
+import { Button } from "@/components/ui";
 
 import { useAuthStore } from "@/store/auth-store";
 
 const navItems = [
   { href: "/workspaces", label: "Workspaces" },
   { href: "/dashboards", label: "Dashboards" },
+  { href: "/migration", label: "Migration" },
   { href: "/datasets", label: "Datasets" },
   { href: "/connections", label: "Connections" },
   { href: "/semantic", label: "Semantic" },
@@ -22,19 +23,33 @@ const navItems = [
 
 export function AppShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
+  const safePathname = pathname ?? "";
   const router = useRouter();
-  const { accessToken, workspaces, currentWorkspaceId, selectWorkspace, clear, email } = useAuthStore();
+  const { accessToken, workspaces, currentWorkspaceId, selectWorkspace, clear, email, hasHydrated } = useAuthStore();
 
-  const isAuthScreen = useMemo(() => pathname.startsWith("/signin") || pathname.startsWith("/signup"), [pathname]);
+  const isAuthScreen = useMemo(() => safePathname.startsWith("/signin") || safePathname.startsWith("/signup"), [safePathname]);
 
   useEffect(() => {
-    if (!accessToken && !isAuthScreen) {
+    if (!hasHydrated || isAuthScreen) {
+      return;
+    }
+    if (!accessToken) {
       router.push("/signin");
     }
-  }, [accessToken, isAuthScreen, router]);
+  }, [accessToken, hasHydrated, isAuthScreen, router]);
 
   if (isAuthScreen) {
     return <>{children}</>;
+  }
+
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen px-4 py-5 md:px-8">
+        <div className="mx-auto max-w-[1400px] rounded-3xl border border-slate-200 bg-white/80 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+          Restoring your workspace...
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -48,7 +63,7 @@ export function AppShell({ children }: PropsWithChildren) {
 
           <nav className="space-y-1">
             {navItems.map((item) => {
-              const active = pathname.startsWith(item.href);
+              const active = safePathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
@@ -98,3 +113,7 @@ export function AppShell({ children }: PropsWithChildren) {
     </div>
   );
 }
+
+
+
+

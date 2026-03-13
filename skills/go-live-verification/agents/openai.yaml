@@ -1,0 +1,3 @@
+display_name: Go Live Verification
+short_description: Run combined preflight, billing, connector, and load verification with evidence capture.
+default_prompt: Use $go-live-verification to run the operational verification stack, collect artifacts, and update the launch checklist with only the checks that actually passed.

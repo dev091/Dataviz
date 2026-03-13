@@ -1,7 +1,9 @@
 from app.models.entities import (
+    AIActionHistory,
     AIQuerySession,
     AlertEvent,
     AlertRule,
+    ArtifactFeedback,
     AuditLog,
     CalculatedField,
     Dashboard,
@@ -11,6 +13,7 @@ from app.models.entities import (
     DatasetField,
     DatasetRelation,
     InsightArtifact,
+    MetricLineage,
     Organization,
     ReportSchedule,
     RoleAssignment,
@@ -19,6 +22,7 @@ from app.models.entities import (
     SemanticModel,
     SyncJob,
     SyncRun,
+    TransformationLineage,
     User,
     Workspace,
 )
@@ -46,4 +50,8 @@ __all__ = [
     "AuditLog",
     "AIQuerySession",
     "InsightArtifact",
+    "MetricLineage",
+    "TransformationLineage",
+    "AIActionHistory",
+    "ArtifactFeedback",
 ]

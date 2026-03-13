@@ -48,47 +48,46 @@ def test_core_flow_signup_connect_sync_semantic_nl(client: TestClient, tmp_path:
 
     discover = client.post(f"/api/v1/connections/{connection_id}/discover", headers=headers)
     assert discover.status_code == 200, discover.text
+    assert discover.json().get("meta", {}).get("retry", {}).get("operation") == "preview_schema"
 
     sync = client.post(f"/api/v1/connections/{connection_id}/sync", headers=headers)
     assert sync.status_code == 200, sync.text
     assert sync.json()["status"] == "success"
+    assert sync.json()["logs"]["retry"]["operation"] == "sync"
 
     datasets = client.get("/api/v1/semantic/datasets", headers=headers)
     assert datasets.status_code == 200, datasets.text
-    dataset_id = datasets.json()[0]["id"]
+    dataset_payload = datasets.json()[0]
+    dataset_id = dataset_payload["id"]
+    assert dataset_payload["quality_status"] in {"excellent", "good", "warning", "critical"}
+    assert dataset_payload["quality_profile"]["overall_score"] >= 0
+    assert dataset_payload["quality_profile"]["field_profiles"]
+
+    draft = client.post(
+        "/api/v1/semantic/models/draft",
+        headers=headers,
+        json={"dataset_id": dataset_id},
+    )
+    assert draft.status_code == 200, draft.text
+    draft_payload = draft.json()
+    assert draft_payload["metrics"]
+    assert any(metric["name"] == "revenue" for metric in draft_payload["metrics"])
+    assert any(dimension["name"] == "region" for dimension in draft_payload["dimensions"])
+    assert any(field["name"] == "gross_margin" for field in draft_payload["calculated_fields"])
 
     create_model = client.post(
         "/api/v1/semantic/models",
         headers=headers,
-        json={
-            "name": "Revenue Model",
-            "model_key": "revenue_model",
-            "description": "",
-            "base_dataset_id": dataset_id,
-            "joins": [],
-            "metrics": [
-                {
-                    "name": "revenue",
-                    "label": "Revenue",
-                    "formula": "SUM(revenue)",
-                    "aggregation": "sum",
-                    "visibility": "public",
-                }
-            ],
-            "dimensions": [
-                {
-                    "name": "region",
-                    "label": "Region",
-                    "field_ref": "region",
-                    "data_type": "string",
-                    "visibility": "public",
-                }
-            ],
-            "calculated_fields": [],
-        },
+        json={key: value for key, value in draft_payload.items() if key != "inference_notes"},
     )
     assert create_model.status_code == 200, create_model.text
     semantic_model_id = create_model.json()["id"]
+
+    model_detail = client.get(f"/api/v1/semantic/models/{semantic_model_id}", headers=headers)
+    assert model_detail.status_code == 200, model_detail.text
+    detail_payload = model_detail.json()
+    assert any(metric["name"] == "revenue" and metric["value_format"] == "currency" for metric in detail_payload["metrics"])
+    assert any(field["name"] == "gross_margin" for field in detail_payload["calculated_fields"])
 
     nl = client.post(
         "/api/v1/nl/query",
@@ -104,6 +103,20 @@ def test_core_flow_signup_connect_sync_semantic_nl(client: TestClient, tmp_path:
     assert payload["summary"]
     assert payload["agent_trace"]
     assert len(payload["agent_trace"]) >= 3
+    assert payload["related_queries"] == []
+
+    follow_up = client.post(
+        "/api/v1/nl/query",
+        headers=headers,
+        json={
+            "semantic_model_id": semantic_model_id,
+            "question": "summarize revenue trend by region",
+        },
+    )
+    assert follow_up.status_code == 200, follow_up.text
+    follow_up_payload = follow_up.json()
+    assert follow_up_payload["related_queries"]
+    assert follow_up_payload["related_queries"][0]["question"] == "show revenue by region"
 
     dashboards = client.post(
         "/api/v1/dashboards",
@@ -112,6 +125,18 @@ def test_core_flow_signup_connect_sync_semantic_nl(client: TestClient, tmp_path:
     )
     assert dashboards.status_code == 200, dashboards.text
     dashboard_id = dashboards.json()["id"]
+
+    auto_compose = client.post(
+        f"/api/v1/dashboards/{dashboard_id}/auto-compose",
+        headers=headers,
+        json={
+            "semantic_model_id": semantic_model_id,
+            "goal": "Executive overview",
+            "max_widgets": 6,
+        },
+    )
+    assert auto_compose.status_code == 200, auto_compose.text
+    assert auto_compose.json()["widgets_added"] >= 4
 
     add_widget = client.post(
         f"/api/v1/dashboards/{dashboard_id}/widgets/from-ai",
@@ -123,6 +148,65 @@ def test_core_flow_signup_connect_sync_semantic_nl(client: TestClient, tmp_path:
         },
     )
     assert add_widget.status_code == 200, add_widget.text
+
+    manual_widget = client.post(
+        f"/api/v1/dashboards/{dashboard_id}/widgets",
+        headers=headers,
+        json={
+            "title": "North Revenue KPI",
+            "widget_type": "kpi",
+            "config": {
+                "summary": "North remains ahead of plan.",
+                "chart": {"type": "kpi", "metric": "Revenue", "value": "59800", "delta": "+12%"},
+            },
+            "position": {"x": 6, "y": 0, "w": 4, "h": 3},
+        },
+    )
+    assert manual_widget.status_code == 200, manual_widget.text
+    widget_id = manual_widget.json()["id"]
+
+    update_widget = client.put(
+        f"/api/v1/dashboards/{dashboard_id}/widgets/{widget_id}",
+        headers=headers,
+        json={
+            "title": "North Revenue KPI Updated",
+            "widget_type": "kpi",
+            "config": {
+                "summary": "North remains the lead segment after the latest refresh.",
+                "chart": {"type": "kpi", "metric": "Revenue", "value": "60200", "delta": "+13%"},
+            },
+            "position": {"x": 7, "y": 0, "w": 4, "h": 3},
+        },
+    )
+    assert update_widget.status_code == 200, update_widget.text
+    assert update_widget.json()["title"] == "North Revenue KPI Updated"
+
+    dashboard_detail = client.get(f"/api/v1/dashboards/{dashboard_id}", headers=headers)
+    assert dashboard_detail.status_code == 200, dashboard_detail.text
+    assert len(dashboard_detail.json()["widgets"]) >= 6
+
+    report_pack = client.post(
+        f"/api/v1/dashboards/{dashboard_id}/report-pack",
+        headers=headers,
+        json={
+            "audience": "Executive leadership",
+            "goal": "Board-ready summary with risk and action framing",
+        },
+    )
+    assert report_pack.status_code == 200, report_pack.text
+    report_pack_payload = report_pack.json()
+    assert report_pack_payload["executive_summary"]
+    assert report_pack_payload["sections"]
+    assert report_pack_payload["next_actions"]
+
+    delete_widget = client.delete(f"/api/v1/dashboards/{dashboard_id}/widgets/{widget_id}", headers=headers)
+    assert delete_widget.status_code == 204, delete_widget.text
+
+    trust_history = client.get("/api/v1/admin/ai-trust-history", headers=headers)
+    assert trust_history.status_code == 200, trust_history.text
+    trust_payload = trust_history.json()
+    assert any(item["artifact_type"] == "nl_query" for item in trust_payload)
+    assert any(item["artifact_type"] == "report_pack" for item in trust_payload)
 
     audit = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit.status_code == 200, audit.text

@@ -53,7 +53,7 @@ Legend:
 - [x] Current product can support KPI scorecard generation
 - [x] Current product can support anomaly detection and leadership alerts
 - [~] Current product can support recurring board-style summaries through dashboard report packs, but board-ready template systems are still shallow
-- [~] Initial launch-pack templates and first-executive-pack-fast provisioning are implemented for Finance, RevOps, Operations, and Leadership, but full domain-specific onboarding packs are still incomplete
+- [~] Initial launch-pack templates, first-executive-pack-fast provisioning, onboarding playbooks, KPI validation checklists, and adoption instrumentation are implemented for Finance, RevOps, Operations, and Leadership, but full domain-specific onboarding packs are still incomplete
 - [ ] A sharper wedge alternative has not been proven superior enough to replace the default wedge
 
 ## ICP and Buyer Map
@@ -141,8 +141,8 @@ Legend:
 - [x] KPI scorecards
 - [x] Anomaly reports
 - [~] Board-style summaries
-- [ ] Exception reports as a distinct productized output type
-- [ ] Department operating views as packaged launch artifacts
+- [~] Exception reports now exist as launch-pack and report-pack artifacts, but coverage is still limited to template-driven executive flows
+- [~] Department operating views now exist as packaged launch-pack artifacts, but template coverage and onboarding instrumentation are still incomplete
 - [~] Drill paths for diagnostics are partial
 
 ### E. Natural-Language Analytics
@@ -274,11 +274,11 @@ Legend:
 ### Commercial and Onboarding System
 - [~] Owner: Customer Success and Onboarding Agent
 - [~] Collaborators: Pricing and Packaging Agent, GTM Agent, Developer Experience Agent, Executive Reporting Agent
-- [~] Deliverables: billing scaffolding, typed connector onboarding, runbooks, demo data, first-pack workflow
-- [~] Autonomous scope: self-serve setup where possible, template bootstrapping, demo guidance
+- [~] Deliverables: billing scaffolding, typed connector onboarding, runbooks, demo data, first-pack workflow, onboarding playbooks, KPI validation checklists, and adoption instrumentation
+- [~] Autonomous scope: self-serve setup where possible, template bootstrapping, onboarding playbook generation, KPI validation checklists, and demo guidance
 - [ ] Human review: onboarding design, packaging, pricing negotiation, enterprise deployment requirements
 - [~] Failure handling: verification scripts, docs, support playbooks
-- [~] Instrumentation: time to first connected source, time to first dashboard, time to first report pack
+- [~] Instrumentation: time to first connected source, time to first dashboard, time to first report pack, onboarding events, and launch-pack adoption signals
 - [ ] Success metrics: onboarding duration, implementation effort, support burden, expansion rate
 
 ## Launch Version Constraints
@@ -290,8 +290,8 @@ Legend:
 - [x] Prioritize executive summary generation
 - [~] Prioritize KPI monitoring and digests
 - [~] Prioritize explainability and trust layer
-- [~] Initial launch-pack templates and first-pack provisioning are implemented, but the onboarding system is still partial
-- [~] Initial migration assistant exists for incumbent BI bundles, but direct workbook import and automated trust comparison are not yet complete
+- [~] Initial launch-pack templates, first-pack provisioning, and onboarding playbooks are implemented, but the onboarding system is still partial
+- [x] Initial migration assistant now supports direct workbook import, benchmark-driven automated trust comparison, bulk KPI promotion, and governed bootstrap pack creation
 - [x] Premium UX shell is implemented
 - [x] Giant feature parity matrices are deprioritized
 - [x] Long-tail visual sprawl is deprioritized
@@ -300,18 +300,18 @@ Legend:
 - [x] High-support customization is deprioritized
 
 ## Migration Strategy From Incumbents
-- [~] Dashboard and report mapping assistant exists through migration assistant analysis and launch-pack recommendation, but direct workbook import is not complete
-- [~] KPI definition migration helper exists through governed KPI matching and calculated-field promotion guidance, but bulk import and certification flows are not complete
+- [x] Dashboard and report mapping assistant exists through migration assistant analysis, workbook import, and launch-pack recommendation
+- [x] KPI definition migration helper exists through governed KPI matching, workbook-native KPI import, certification review, and lineage-aware bulk KPI promotion
 - [~] Connector-first onboarding accelerators exist partially through typed connector setup and broad file ingestion
 - [~] Launch-pack templates exist for Finance, RevOps, Operations, and Leadership, but broader migration-grade template coverage is still incomplete
 - [x] First executive pack fast workflow exists through launch-pack provisioning, semantic draft generation, auto-compose, and report packs
 - [~] Semantic model bootstrap tools exist through draft generation and migration assistant bootstrap flows, but they are not yet complete for complex incumbent models
-- [~] Trust validation planning exists through migration comparison checklists, but automated output comparison versus incumbent BI is not yet complete
+- [~] Trust validation now includes benchmark-driven automated comparison, workbook-native import, certification review, and migration readiness scoring, but broader coverage remains incomplete
 
 ## Architecture Direction
 - [~] Architecture is allowed to evolve beyond a single arbitrary stack where justified, but the current product is still built on a coherent single-stack foundation
 - [x] Current core platform is multi-tenant web, API, worker, connectors, semantic layer, analytics engine, and governance foundation
-- [~] Modular paths exist for connectors, prompts, analytics helpers, semantic helpers, and storage adapters
+- [x] Modular paths exist for connectors, prompts, analytics helpers, semantic helpers, executive output and migration libraries, data-prep libraries, proactive monitoring libraries, and storage adapters
 - [x] Third-party infrastructure boundaries are already used or prepared for mail, billing provider, AI provider, storage backend, and observability stack
 - [~] Cost-sensitive design exists through productized flows and low-services intent, but live operating cost is not yet measured
 
@@ -344,8 +344,8 @@ Legend:
 - [x] 26. Async workflow and event model exist in product through worker, jobs, and schedules
 - [~] 27. Launch version scope exists, but needs re-baselining around the new wedge
 - [~] 28. Enterprise expansion roadmap exists partially, but not as a dedicated strategic artifact
-- [~] 29. Onboarding and implementation model now includes launch-pack provisioning and first-executive-pack-fast workflow, but full productized implementation remains incomplete
-- [~] 30. Migration strategy from incumbent BI tools now includes mapping, trust-validation planning, and governed pack bootstrap, but direct import and automated comparison remain incomplete
+- [~] 29. Onboarding and implementation model now includes launch-pack provisioning, onboarding playbooks, KPI validation instrumentation, and first-executive-pack-fast workflow, but full productized implementation remains incomplete
+- [~] 30. Migration strategy from incumbent BI tools now includes mapping, direct workbook import, benchmark-driven trust comparison, certification review, governed pack bootstrap, and lineage-aware bulk KPI promotion, but richer incumbent coverage remains incomplete
 - [x] 31. Test strategy exists in repo
 - [x] 32. Observability and reliability strategy exist in repo
 - [x] 33. Deployment architecture exists in repo
@@ -360,11 +360,11 @@ Legend:
 - [x] Metadata discovery, schema preview, sync, scheduled sync, sync logs, retry metadata
 - [x] Semantic layer with metrics, dimensions, joins, calculated fields, validation, versioning, and draft generation
 - [x] Dataset quality profiling with field-level warnings and cleaning impact visibility
-- [x] AI Data Prep Autopilot panel with reversible cleaning plans, join and union suggestions, calculated-field promotion guidance, lineage review, and step-level feedback capture
+- [x] AI Data Prep Autopilot panel with reversible cleaning plans, join and union suggestions, calculated-field promotion guidance, lineage review, step-level feedback capture, and dedicated data-prep libraries
 - [x] Dashboards with manual widgets, AI-saved widgets, drag and resize persistence, and auto-compose
-- [x] Dashboard report packs with executive summary sections and suggested next actions
-- [x] Launch-pack provisioning for Finance, RevOps, Operations, and Leadership with first-executive-pack-fast workflow
-- [x] Migration assistant for Tableau, Power BI, Domo, and generic BI bundles with KPI mapping, trust-validation plans, and governed pack bootstrap
+- [x] Dashboard report packs with executive summary sections, suggested next actions, and dedicated executive output libraries
+- [x] Launch-pack provisioning for Finance, RevOps, Operations, and Leadership with onboarding playbooks, KPI validation instrumentation, adoption signals, and first-executive-pack-fast workflow
+- [x] Migration assistant for Tableau, Power BI, Domo, and generic BI bundles with workbook import, KPI mapping, trust-validation plans, certification review, lineage-aware bulk KPI promotion, governed pack bootstrap, and dedicated migration libraries
 - [x] NL analytics with planning, SQL safety, chart recommendation, summaries, follow-ups, and related-query recall
 - [x] Alerts, schedules, email delivery logs, admin views, usage, and audit visibility
 - [x] Billing and subscription scaffolding for commercial readiness
@@ -372,8 +372,8 @@ Legend:
 
 ## Remaining Work To Reach This New Roadmap
 - [ ] Operationalize the new strategy, wedge, pricing, and economics docs into GTM execution, product instrumentation, and live commercial workflows
-- [~] Deepen and validate launch wedge packs for RevOps, Finance, Operations, and Leadership into full onboarding systems with migration, KPI validation, and adoption instrumentation
-- [~] Deepen migration assistants with direct workbook import, bulk KPI migration, and automated trust comparison against incumbent outputs
+- [~] Deepen and validate launch wedge packs for RevOps, Finance, Operations, and Leadership into full onboarding systems; onboarding playbooks and KPI validation instrumentation now exist, but customer-validated rollout depth is still incomplete
+- [~] Deepen migration assistants with broader automated comparison coverage, richer incumbent workbook parsing, and broader migration-grade coverage beyond the current certification review workflow
 - [~] Deeper AI Data Prep Autopilot now exists in-product through reversible plans, feedback loops, and structural suggestions, but stronger transformation reasoning and governed execution remain
 - [~] Stronger semantic governance now exists in-product with synonyms, hierarchies, ownership, certification controls, and semantic trust review, but richer lineage and policy depth remain
 - [~] Stronger trust UX now includes semantic trust panels and validation views, but prompt and action history remain incomplete
@@ -385,8 +385,13 @@ Legend:
 ## Current Truth
 - The platform satisfies the original local product baseline and local Definition of Done.
 - The platform now partially aligns with a more ambitious Autonomous Executive Reporting and KPI Intelligence company roadmap.
-- The biggest remaining gaps are now productized onboarding, migration leverage, trust depth, proactive intelligence depth, pricing validation, and real production execution.
+- The biggest remaining gaps are now productized onboarding, migration breadth, transformation and prompt lineage depth, proactive intelligence depth, pricing validation, and real production execution.
 - The correct answer to "are we 100% done against this new master roadmap" is `no`.
+
+
+
+
+
 
 
 
